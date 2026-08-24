@@ -12,8 +12,10 @@ import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
 import com.aura.domain.*
 import com.aura.resolver.IntentRouter
+import com.aura.resolver.L0Index
 import com.aura.resolver.L0IndexFactory
 import com.aura.resolver.L0Resolver
+import com.aura.resolver.l1.L1Resolver
 import com.aura.ui.home.HomeScreen
 import androidx.compose.foundation.isSystemInDarkTheme
 
@@ -28,9 +30,10 @@ class MainActivity : ComponentActivity() {
                 var focused by remember { mutableStateOf(false) }
                 var isResolving by remember { mutableStateOf(false) }
 
-                // L0 Exact Index — built once, queried cheaply (<10ms) on every keystroke.
+                // L0 + L1 — built once, queried cheaply (L0 <10ms, L1 <5ms) on every keystroke.
                 // Index is in-memory for v0.1; platform provider will replace demo data via WorkManager later.
-                val router = remember { IntentRouter(L0Resolver(L0IndexFactory.demoIndex())) }
+                val index = remember { L0IndexFactory.demoIndex() }
+                val router = remember { IntentRouter(L0Resolver(index), L1Resolver(index)) }
 
                 // Real L0 routing — produces only Act/Ask/Idle/Empty/Error, no provenance.
                 LaunchedEffect(query) {

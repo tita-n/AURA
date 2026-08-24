@@ -88,11 +88,15 @@ object L0IndexFactory {
         entities += contactEntity("3", "Sarah M.", "mobile")
         entities += contactEntity("4", "Dad", "mobile")
         entities += contactEntity("5", "Mum", "mobile")
-        // Settings — deterministic only
+        // Settings — deterministic only (include both base and "settings" suffixed forms for L1)
         entities += settingsEntity("wifi", "Wi-Fi", "Network")
+        entities += settingsEntity("wifi_settings", "Wi-Fi settings", "Network")
         entities += settingsEntity("bluetooth", "Bluetooth")
+        entities += settingsEntity("bluetooth_settings", "Bluetooth settings")
         entities += settingsEntity("display", "Display")
+        entities += settingsEntity("display_settings", "Display settings")
         entities += settingsEntity("sound", "Sound")
+        entities += settingsEntity("sound_settings", "Sound settings")
         return L0Index.build(entities)
     }
 
