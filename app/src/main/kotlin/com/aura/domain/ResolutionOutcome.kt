@@ -103,9 +103,19 @@ data class ActionChipData(
  */
 sealed interface AuraAction {
     data class OpenApp(val packageName: String) : AuraAction
-    data class Dial(val phoneNumber: String) : AuraAction
-    data class SendMessage(val contactId: String, val channel: String = "default", val message: String? = null) : AuraAction
-    data class SendEmail(val contactId: String, val subject: String? = null, val body: String? = null) : AuraAction
+    data class Dial(val phoneNumber: String, val contactId: String? = null) : AuraAction
+    data class SendMessage(
+        val contactId: String,
+        val channel: String = "default",
+        val message: String? = null,
+        val phone: String? = null // validated target — populated from indexed contact data
+    ) : AuraAction
+    data class SendEmail(
+        val contactId: String,
+        val subject: String? = null,
+        val body: String? = null,
+        val emailAddress: String? = null // validated target — populated from indexed contact data
+    ) : AuraAction
     data class Copy(val text: String) : AuraAction
     data class OpenCalculator(val expression: String) : AuraAction
     data class SetAlarm(val hour: Int, val minute: Int) : AuraAction

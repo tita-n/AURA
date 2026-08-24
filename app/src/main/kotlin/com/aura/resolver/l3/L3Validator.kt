@@ -58,42 +58,50 @@ class L3Validator(
     }
 
     private fun validateDial(action: AuraAction.Dial, result: ResolvedResult): L3ValidationResult {
-        val contactId = action.phoneNumber.trim() // actually contactId in Dial case is contactId, not phone
+        val contactId = action.contactId?.trim() ?: ""
         if (contactId.isBlank()) return L3ValidationResult.Invalid("Invalid contact")
-        val exists = index.allEntities().any { it.id == "contact:$contactId" || it.id == contactId }
-        if (!exists) {
-            // Also check by contactId without prefix
-            val byId = index.allEntities().any { it.id.removePrefix("contact:") == contactId }
-            if (!byId) return L3ValidationResult.Invalid("Contact not found")
-        }
-        // Ambiguous check: if this contact's display name has duplicates, L2 should have produced ASK, but if we reach here with single, validate
-        // We do not silently select ambiguous; if the contactId corresponds to a name with multiple entries, we must ensure it's not ambiguous
-        // For now, since we have exact contactId, it's not ambiguous — the ambiguity was at resolution time, not validation
+        val entity = index.allEntities().firstOrNull {
+            it.id == "contact:$contactId" || it.id.removePrefix("contact:") == contactId
+        } ?: return L3ValidationResult.Invalid("Contact not found")
+        // Capability check — real indexed data: Dial requires at least one phone target.
+        if (entity.phones.isEmpty()) return L3ValidationResult.Unavailable(result.id.removePrefix("contact:"))
+        if (action.phoneNumber.isBlank()) return L3ValidationResult.Invalid("No phone number for contact")
         return L3ValidationResult.Validated(ValidatedAction(result))
     }
 
     private fun validateSendMessage(action: AuraAction.SendMessage, result: ResolvedResult): L3ValidationResult {
         val contactId = action.contactId.trim()
         if (contactId.isBlank()) return L3ValidationResult.Invalid("Invalid contact")
-        val exists = index.allEntities().any { it.id == "contact:$contactId" || it.id.removePrefix("contact:") == contactId }
-        if (!exists) return L3ValidationResult.Invalid("Contact not found")
+        val entity = index.allEntities().firstOrNull {
+            it.id == "contact:$contactId" || it.id.removePrefix("contact:") == contactId
+        } ?: return L3ValidationResult.Invalid("Contact not found")
         if (action.channel.isNotBlank() && action.channel !in supportedChannels) {
-            // Channel must be supported, but we don't fail if it's default — future channels may be added
-            // For now, treat unknown channel as Invalid if it's not in supported set and not default
-            // Allow any non-blank for forward compatibility? Spec says channel must be supported
             return L3ValidationResult.Invalid("Unsupported channel")
         }
-        // Message body is optional per contract, so no further validation
+        // SMS-family channels require a phone target; whatsapp only needs the app.
+        val needsPhone = action.channel.lowercase() in setOf("default", "message", "sms")
+        if (needsPhone && entity.phones.isEmpty()) {
+            return L3ValidationResult.Unavailable(contactId)
+        }
+        if (needsPhone && action.phone.isNullOrBlank()) {
+            // Proposal missing target that the index says exists — deterministic repair is forbidden,
+            // but the index is authoritative: surface as unavailable rather than guess.
+            return L3ValidationResult.Unavailable(contactId)
+        }
         return L3ValidationResult.Validated(ValidatedAction(result))
     }
 
     private fun validateSendEmail(action: AuraAction.SendEmail, result: ResolvedResult): L3ValidationResult {
         val contactId = action.contactId.trim()
         if (contactId.isBlank()) return L3ValidationResult.Invalid("Invalid contact")
-        val exists = index.allEntities().any { it.id == "contact:$contactId" || it.id.removePrefix("contact:") == contactId }
-        if (!exists) return L3ValidationResult.Invalid("Contact not found")
-        // Email capability: for v0.1, any contact with valid id is considered emailable (deterministic)
-        // Future may check for email address in disambiguation, but not now
+        val entity = index.allEntities().firstOrNull {
+            it.id == "contact:$contactId" || it.id.removePrefix("contact:") == contactId
+        } ?: return L3ValidationResult.Invalid("Contact not found")
+        // Capability check — real indexed data: email requires an address target.
+        if (entity.emails.isEmpty()) return L3ValidationResult.Unavailable(contactId)
+        if (action.emailAddress.isNullOrBlank()) {
+            return L3ValidationResult.Unavailable(contactId)
+        }
         return L3ValidationResult.Validated(ValidatedAction(result))
     }
 

@@ -108,13 +108,15 @@ class AndroidActionExecutor(
     }
 
     private fun executeDial(action: AuraAction.Dial): ExecutionResult {
-        // PRD §9.2: hand off via ACTION_DIAL — no CALL_PHONE permission; user confirms in dialer.
-        // AURA never places the call itself. No number is fabricated from user text.
+        // PRD §9.2: ACTION_DIAL hand-off — no CALL_PHONE; user confirms in dialer.
+        // Number comes only from validated indexed contact data, never raw query text.
         return try {
             val pm = context.packageManager
-            val intent = Intent(Intent.ACTION_DIAL).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+            val intent = if (action.phoneNumber.isNotBlank()) {
+                Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:${android.net.Uri.encode(action.phoneNumber)}"))
+            } else {
+                Intent(Intent.ACTION_DIAL)
+            }.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             if (intent.resolveActivity(pm) == null) return ExecutionResult.Unavailable
             context.startActivity(intent)
             ExecutionResult.Success
@@ -131,7 +133,8 @@ class AndroidActionExecutor(
             val pm = context.packageManager
             when (action.channel.lowercase()) {
                 "default", "message", "sms" -> {
-                    val intent = Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:")).apply {
+                    val uri = if (!action.phone.isNullOrBlank()) "smsto:${android.net.Uri.encode(action.phone)}" else "smsto:"
+                    val intent = Intent(Intent.ACTION_SENDTO, android.net.Uri.parse(uri)).apply {
                         action.message?.let { putExtra("sms_body", it) }
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
@@ -154,11 +157,12 @@ class AndroidActionExecutor(
     }
 
     private fun executeSendEmail(action: AuraAction.SendEmail): ExecutionResult {
-        // mailto composer hand-off via ACTION_SENDTO — never claims delivery.
+        // mailto composer hand-off with validated address — never claims delivery.
         return try {
             val pm = context.packageManager
+            val uri = if (!action.emailAddress.isNullOrBlank()) "mailto:${android.net.Uri.encode(action.emailAddress)}" else "mailto:"
             val intent = Intent(Intent.ACTION_SENDTO).apply {
-                data = android.net.Uri.parse("mailto:")
+                data = android.net.Uri.parse(uri)
                 action.subject?.let { putExtra(Intent.EXTRA_SUBJECT, it) }
                 action.body?.let { putExtra(Intent.EXTRA_TEXT, it) }
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

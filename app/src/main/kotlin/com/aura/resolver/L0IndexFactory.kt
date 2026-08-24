@@ -32,7 +32,9 @@ object L0IndexFactory {
         contactId: String,
         displayName: String,
         disambiguation: String, // e.g., "Work · WhatsApp" or "Family" — never raw phone alone
-        subtitle: String? = disambiguation
+        subtitle: String? = disambiguation,
+        phones: List<String> = emptyList(),
+        emails: List<String> = emptyList()
     ): IndexedEntity {
         val normalized = Normalizer.normalize(displayName)
         return IndexedEntity(
@@ -47,7 +49,9 @@ object L0IndexFactory {
             actionChips = listOf(
                 ActionChipData("message", "Message"),
                 ActionChipData("call", "Call")
-            )
+            ),
+            phones = phones,
+            emails = emails
         )
     }
 
@@ -78,11 +82,11 @@ object L0IndexFactory {
     )
 
     fun demoContacts(): List<IndexedEntity> = listOf(
-        contactEntity("1", "Sarah", "sarah.okafor@email.com"),
-        contactEntity("2", "Sarah", "called yesterday"),
-        contactEntity("3", "Sarah M.", "mobile"),
-        contactEntity("4", "Dad", "mobile"),
-        contactEntity("5", "Mum", "mobile")
+        contactEntity("1", "Sarah", "sarah.okafor@email.com", phones = listOf("+2348010000001"), emails = listOf("sarah.okafor@email.com")),
+        contactEntity("2", "Sarah", "called yesterday", phones = listOf("+2348010000002")),
+        contactEntity("3", "Sarah M.", "mobile", phones = listOf("+2348010000003")),
+        contactEntity("4", "Dad", "mobile", phones = listOf("+2348010000004")),
+        contactEntity("5", "Mum", "mobile", phones = listOf("+2348010000005"))
     )
 
     fun demoSettings(): List<IndexedEntity> = listOf(

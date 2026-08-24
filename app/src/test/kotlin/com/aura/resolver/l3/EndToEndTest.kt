@@ -92,17 +92,17 @@ class EndToEndTest {
     }
 
     @Test fun `dial success`() {
-        val res = com.aura.domain.ResolvedResult("contact:4", "Dad", type = ResultType.Call, action = AuraAction.Dial("4"))
+        val res = com.aura.domain.ResolvedResult("contact:4", "Dad", type = ResultType.Call, action = AuraAction.Dial("+2348010000004", contactId = "4"))
         assertTrue(L3Validator(index).validate(res) is L3ValidationResult.Validated)
     }
 
     @Test fun `message success`() {
-        val res = com.aura.domain.ResolvedResult("contact:4", "Dad", type = ResultType.Message, action = AuraAction.SendMessage("4", "default", "hello"))
+        val res = com.aura.domain.ResolvedResult("contact:4", "Dad", type = ResultType.Message, action = AuraAction.SendMessage("4", "default", "hello", phone = "+2348010000004"))
         assertTrue(L3Validator(index).validate(res) is L3ValidationResult.Validated)
     }
 
     @Test fun `email success`() {
-        val res = com.aura.domain.ResolvedResult("contact:4", "Dad", type = ResultType.Email, action = AuraAction.SendEmail("4"))
+        val res = com.aura.domain.ResolvedResult("contact:1", "Sarah", type = ResultType.Email, action = AuraAction.SendEmail("1", emailAddress = "sarah.okafor@email.com"))
         assertTrue(L3Validator(index).validate(res) is L3ValidationResult.Validated)
     }
 

@@ -45,7 +45,7 @@ class CallGrammar(
                         title = e.displayLabel,
                         subtitle = e.disambiguation,
                         type = ResultType.Call,
-                        action = AuraAction.Dial(e.id.removePrefix("contact:"))
+                        action = AuraAction.Dial(phoneNumber = e.phones.firstOrNull() ?: "", contactId = e.id.removePrefix("contact:"))
                     )
                 )
             }

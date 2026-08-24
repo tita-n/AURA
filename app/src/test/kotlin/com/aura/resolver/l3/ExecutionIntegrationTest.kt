@@ -71,9 +71,9 @@ class ExecutionIntegrationTest {
     }
 
     @Test fun `contact actions require existing contact`() {
-        val good = ResolvedResult("contact:4", "Dad", type = ResultType.Call, action = AuraAction.Dial("4"))
+        val good = ResolvedResult("contact:4", "Dad", type = ResultType.Call, action = AuraAction.Dial("+2348010000004", contactId = "4"))
         assertTrue(validator.validate(good) is L3ValidationResult.Validated)
-        val bad = ResolvedResult("contact:9999", "?", type = ResultType.Call, action = AuraAction.Dial("9999"))
+        val bad = ResolvedResult("contact:9999", "?", type = ResultType.Call, action = AuraAction.Dial("+2348000009999", contactId = "9999"))
         assertTrue(validator.validate(bad) is L3ValidationResult.Invalid)
     }
 

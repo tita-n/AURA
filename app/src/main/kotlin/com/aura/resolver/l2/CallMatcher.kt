@@ -42,7 +42,7 @@ class CallMatcher(private val index: L0Index) {
         }
         if (contacts.size == 1) {
             val e = contacts.first()
-            return L2Result.Resolved(ResolvedResult(id = e.id, title = e.displayLabel, subtitle = e.disambiguation, type = ResultType.Call, action = AuraAction.Dial(e.id.removePrefix("contact:"))))
+            return L2Result.Resolved(ResolvedResult(id = e.id, title = e.displayLabel, subtitle = e.disambiguation, type = ResultType.Call, action = AuraAction.Dial(phoneNumber = e.phones.firstOrNull() ?: "", contactId = e.id.removePrefix("contact:"))))
         }
         if (contacts.size > 1) {
             val items = contacts.map { e -> CandidateItemData(e.id, e.displayLabel, e.disambiguation, e.subtitle) }
@@ -51,7 +51,7 @@ class CallMatcher(private val index: L0Index) {
         // Fuzzy fallback for typo like "sarahh"
         val fuzzy = findContactFuzzy(norm)
         return when (fuzzy) {
-            is FuzzyResult.Single -> L2Result.Resolved(ResolvedResult(id = fuzzy.entity.id, title = fuzzy.entity.displayLabel, subtitle = fuzzy.entity.disambiguation, type = ResultType.Call, action = AuraAction.Dial(fuzzy.entity.id.removePrefix("contact:"))))
+            is FuzzyResult.Single -> L2Result.Resolved(ResolvedResult(id = fuzzy.entity.id, title = fuzzy.entity.displayLabel, subtitle = fuzzy.entity.disambiguation, type = ResultType.Call, action = AuraAction.Dial(phoneNumber = fuzzy.entity.phones.firstOrNull() ?: "", contactId = fuzzy.entity.id.removePrefix("contact:"))))
             is FuzzyResult.Multiple -> {
                 val items = fuzzy.entities.map { e -> CandidateItemData(e.id, e.displayLabel, e.disambiguation, e.subtitle) }
                 L2Result.Ambiguous(CandidateGroup("Which ${fuzzy.entities.first().displayLabel}", items))

@@ -55,7 +55,7 @@ class MessageMatcher(private val index: L0Index) {
                 title = entity.displayLabel,
                 subtitle = message?.let { "\"$it\"" } ?: entity.disambiguation,
                 type = ResultType.Message,
-                action = AuraAction.SendMessage(entity.id.removePrefix("contact:"), channel = "default", message = message),
+                action = AuraAction.SendMessage(contactId = entity.id.removePrefix("contact:"), channel = "default", message = message, phone = entity.phones.firstOrNull()),
                 actionChips = entity.actionChips
             )
         )

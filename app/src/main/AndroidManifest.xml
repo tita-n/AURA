@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- READ_CONTACTS: requested contextually, only when the user first attempts a
+         contact-dependent action (PRD §9.8). App works fully without it. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <!-- Package visibility for launcher discovery (API 30+) — minimal, only MAIN/LAUNCHER -->
     <queries>
         <intent>

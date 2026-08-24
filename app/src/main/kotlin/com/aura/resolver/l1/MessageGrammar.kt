@@ -66,7 +66,7 @@ class MessageGrammar(
                 title = entity.displayLabel,
                 subtitle = if (message != null) "\"$message\"" else entity.disambiguation,
                 type = ResultType.Message,
-                action = AuraAction.SendMessage(entity.id.removePrefix("contact:"), channel = "default", message = message),
+                action = AuraAction.SendMessage(contactId = entity.id.removePrefix("contact:"), channel = "default", message = message, phone = entity.phones.firstOrNull()),
                 actionChips = entity.actionChips
             )
         )

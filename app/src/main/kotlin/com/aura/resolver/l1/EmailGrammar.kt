@@ -52,7 +52,7 @@ class EmailGrammar(
                 title = entity.displayLabel,
                 subtitle = body?.let { "\"$it\"" } ?: entity.disambiguation,
                 type = ResultType.Email,
-                action = AuraAction.SendEmail(entity.id.removePrefix("contact:"), body = body)
+                action = AuraAction.SendEmail(contactId = entity.id.removePrefix("contact:"), body = body, emailAddress = entity.emails.firstOrNull())
             )
         )
     }

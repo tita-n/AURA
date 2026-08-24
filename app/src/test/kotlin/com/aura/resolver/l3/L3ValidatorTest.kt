@@ -36,7 +36,7 @@ class L3ValidatorTest {
     }
 
     @Test fun `3 valid Dial to Validated`() {
-        val res = ResolvedResult("contact:4", "Dad", type = ResultType.Call, action = AuraAction.Dial("4"))
+        val res = ResolvedResult("contact:4", "Dad", type = ResultType.Call, action = AuraAction.Dial("+2348010000004", contactId = "4"))
         assertTrue(validator.validate(res) is L3ValidationResult.Validated)
     }
 
@@ -47,7 +47,7 @@ class L3ValidatorTest {
 
     @Test fun `5 ambiguous contact cannot validate as single is handled at resolution not validation — but validator with specific id still Validated`() {
         // L2 should produce ASK for "Sarah" duplicate, not Act; if somehow an Act with Sarah id 1 is proposed, it should validate because id is specific
-        val res = ResolvedResult("contact:1", "Sarah", type = ResultType.Call, action = AuraAction.Dial("1"))
+        val res = ResolvedResult("contact:1", "Sarah", type = ResultType.Call, action = AuraAction.Dial("+2348010000001", contactId = "1"))
         assertTrue(validator.validate(res) is L3ValidationResult.Validated)
         // However, we verify that router with L3 still produces ASK for "call sarah" (via L2), not Act
         val router = com.aura.resolver.IntentRouter(
@@ -61,12 +61,12 @@ class L3ValidatorTest {
     }
 
     @Test fun `6 valid SendMessage to Validated`() {
-        val res = ResolvedResult("contact:4", "Dad", type = ResultType.Message, action = AuraAction.SendMessage("4", "default", "hello"))
+        val res = ResolvedResult("contact:4", "Dad", type = ResultType.Message, action = AuraAction.SendMessage("4", "default", "hello", phone = "+2348010000004"))
         assertTrue(validator.validate(res) is L3ValidationResult.Validated)
     }
 
     @Test fun `7 invalid SendMessage unknown contact to failure`() {
-        val res = ResolvedResult("contact:999", "Unknown", type = ResultType.Message, action = AuraAction.SendMessage("999", "default", "hi"))
+        val res = ResolvedResult("contact:999", "Unknown", type = ResultType.Message, action = AuraAction.SendMessage("999", "default", "hi", phone = "+2348000009999"))
         assertTrue(validator.validate(res) is L3ValidationResult.Invalid)
     }
 
@@ -76,7 +76,7 @@ class L3ValidatorTest {
     }
 
     @Test fun `8 valid SendEmail to Validated`() {
-        val res = ResolvedResult("contact:4", "Dad", type = ResultType.Email, action = AuraAction.SendEmail("4", body = "hello"))
+        val res = ResolvedResult("contact:1", "Sarah", type = ResultType.Email, action = AuraAction.SendEmail("1", body = "hello", emailAddress = "sarah.okafor@email.com"))
         assertTrue(validator.validate(res) is L3ValidationResult.Validated)
     }
 

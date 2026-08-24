@@ -29,6 +29,25 @@ class L0Resolver(
         }
     }
 
+    private fun enrichedContactAction(e: IndexedEntity): AuraAction {
+        // Contact entities carry communication targets; propose the best supported default
+        // channel by capability: phone -> message composer, else email. L3 still validates.
+        return if (e.category == EntityCategory.Contact) {
+            val contactId = e.id.removePrefix("contact:")
+            when {
+                e.phones.isNotEmpty() -> AuraAction.SendMessage(
+                    contactId = contactId, channel = "default", message = null,
+                    phone = e.phones.firstOrNull()
+                )
+                e.emails.isNotEmpty() -> AuraAction.SendEmail(
+                    contactId = contactId,
+                    emailAddress = e.emails.firstOrNull()
+                )
+                else -> AuraAction.SendMessage(contactId, "default")
+            }
+        } else e.action
+    }
+
     private fun handleExact(entities: List<IndexedEntity>, rawQuery: String): L0Resolution {
         return when {
             entities.size == 1 -> {
@@ -39,7 +58,7 @@ class L0Resolver(
                         title = e.displayLabel,
                         subtitle = e.subtitle,
                         type = e.resultType,
-                        action = e.action,
+                        action = enrichedContactAction(e),
                         actionChips = e.actionChips
                     )
                 )
@@ -73,7 +92,7 @@ class L0Resolver(
                         title = e.displayLabel,
                         subtitle = e.subtitle,
                         type = e.resultType,
-                        action = e.action,
+                        action = enrichedContactAction(e),
                         actionChips = e.actionChips
                     )
                 )
@@ -95,10 +114,6 @@ class L0Resolver(
     }
 }
 
-/**
- * Internal L0 resolution — not exposed to UI.
- * IntentRouter maps this to public ResolutionOutcome without leaking provenance.
- */
 sealed interface L0Resolution {
     data object Idle : L0Resolution
     data class Resolved(val result: ResolvedResult) : L0Resolution

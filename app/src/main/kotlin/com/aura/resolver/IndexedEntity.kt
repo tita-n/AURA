@@ -19,7 +19,11 @@ data class IndexedEntity(
     // For disambiguation in ASK candidate rows — never raw phone as sole fact
     val disambiguation: String? = null,
     val subtitle: String? = null,
-    val actionChips: List<ActionChipData> = emptyList()
+    val actionChips: List<ActionChipData> = emptyList(),
+    // Communication targets — pure data, populated only for contacts.
+    // Never logged, never serialized outside the local in-memory index.
+    val phones: List<String> = emptyList(),
+    val emails: List<String> = emptyList()
 )
 
 enum class EntityCategory {

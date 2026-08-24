@@ -2,7 +2,9 @@ package com.aura
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
@@ -12,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
 import com.aura.domain.*
 import com.aura.platform.AndroidAppIndexProvider
+import com.aura.platform.android.AndroidContactIndexProvider
 import com.aura.resolver.IntentRouter
 import com.aura.resolver.L0Index
 import com.aura.resolver.L0IndexFactory
@@ -41,29 +44,62 @@ class MainActivity : ComponentActivity() {
                 var isResolving by remember { mutableStateOf(false) }
 
                 // Real Android app index — PackageManager off-main-thread, L0Index built once per dataset.
-                // Flow: AndroidAppIndexProvider (IO) -> List<IndexedEntity> -> L0Index.build() -> L0Resolver/L1Resolver -> IntentRouter.
-                // Contacts/settings remain from demo catalog; only apps are replaced with real launchable apps.
+                // Contacts: contextual READ_CONTACTS (PRD §9.8) — loaded only when granted, off-main-thread.
+                // Index composition: realApps + realContacts(if granted) + settings. Denied => graceful:
+                // apps/calculator/settings/timer keep working; contact queries degrade to Empty.
                 val context = androidx.compose.ui.platform.LocalContext.current
                 val scope = rememberCoroutineScope()
                 val executor = remember(context) { AndroidActionExecutor(context.applicationContext) }
-                val currentIndexState = remember { mutableStateOf(L0IndexFactory.demoIndex()) }
+                val contactProvider = remember(context) { AndroidContactIndexProvider(context.applicationContext) }
+
+                fun hasContactsPermission(): Boolean = contactProvider.hasContactsPermission()
+
+                var contactsGranted by remember { mutableStateOf(hasContactsPermission()) }
+                var contactsAskedOnce by remember { mutableStateOf(false) }
+                val currentIndexState = remember { mutableStateOf(L0IndexFactory.buildIndex(emptyList(), contacts = emptyList())) }
                 val routerState = remember {
                     val idx = currentIndexState.value
                     mutableStateOf(IntentRouter(L0Resolver(idx), L1Resolver(idx), L2Resolver(idx), L3Validator(idx)))
                 }
 
-                // Explicit load off-main-thread — no polling, no WorkManager, no loops (Phase 1.5)
-                LaunchedEffect(Unit) {
-                    val realApps = withContext(Dispatchers.IO) {
-                        try {
+                // Contextual permission request — Android's native dialog, triggered only by the first
+                // comms-style query. Never at install, never repeated after one ask.
+                val contactsPermissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    contactsGranted = granted
+                    if (granted) {
+                        scope.launch {
+                            val contacts = withContext(Dispatchers.IO) {
+                                try { contactProvider.getContactEntities() } catch (_: Exception) { emptyList() }
+                            }
+                            val newIndex = L0IndexFactory.buildIndex(
+                                withContext(Dispatchers.IO) {
+                                    try { AndroidAppIndexProvider(context.applicationContext).getAppEntities() } catch (_: Exception) { emptyList() }
+                                },
+                                contacts = contacts
+                            )
+                            currentIndexState.value = newIndex
+                            routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
+                        }
+                    }
+                    // Denied: no nag, no rebuild — index stays without contacts; everything else works.
+                }
+
+                // Initial load — apps always; contacts only if already granted.
+                LaunchedEffect(contactsGranted) {
+                    val (realApps, contacts) = withContext(Dispatchers.IO) {
+                        val apps: List<com.aura.resolver.IndexedEntity> = try {
                             AndroidAppIndexProvider(context.applicationContext).getAppEntities()
                         } catch (_: Exception) { emptyList() }
+                        val cts: List<com.aura.resolver.IndexedEntity> = if (contactsGranted) {
+                            try { contactProvider.getContactEntities() } catch (_: Exception) { emptyList() }
+                        } else emptyList()
+                        apps to cts
                     }
-                    if (realApps.isNotEmpty()) {
-                        val newIndex = L0IndexFactory.buildIndex(realApps)
-                        currentIndexState.value = newIndex
-                        routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
-                    }
+                    val newIndex = L0IndexFactory.buildIndex(realApps, contacts = contacts)
+                    currentIndexState.value = newIndex
+                    routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
                 }
 
                 // Single explicit-execution path: proposal -> L3 validation -> ValidatedAction -> executor.
@@ -91,8 +127,16 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Real routing — re-evaluates when query or router (after real index load) changes
+                // Real routing — re-evaluates when query or router (after real index load) changes.
+                // Also implements the one-time contextual contacts ask on the first comms query.
                 LaunchedEffect(query, routerState.value) {
+                    if (!contactsGranted && !contactsAskedOnce &&
+                        Regex("^(call|dial|phone|ring|message|text|chat|tell|whatsapp|email|mail|send)\\b", RegexOption.IGNORE_CASE)
+                            .containsMatchIn(query.trim())
+                    ) {
+                        contactsAskedOnce = true
+                        contactsPermissionLauncher.launch(AndroidContactIndexProvider.CONTACTS_PERMISSION)
+                    }
                     if (query == "resolving") {
                         isResolving = true
                         commandState = CommandState.Idle
