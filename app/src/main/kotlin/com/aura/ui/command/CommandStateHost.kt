@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
 import com.aura.domain.*
+import com.aura.platform.AppIcon
 import com.aura.ui.components.*
 
 /**
@@ -117,10 +118,20 @@ private fun ActContent(
     }
 
     // Dominant result — ResultPrimary, accent tint, immediately actionable
+    // For apps, show unmodified OS icon via platform helper; for contacts, keep initials/photo placeholder
+    val isApp = result.type == ResultType.App && result.action is AuraAction.OpenApp
     ResultItem(
         title = result.title,
         subtitle = result.subtitle,
         selected = true,
+        icon = {
+            if (isApp) {
+                val pkg = (result.action as AuraAction.OpenApp).packageName
+                AppIcon(packageName = pkg, label = result.title, contentDescription = result.title)
+            } else {
+                ResultIconPlaceholder(result.title)
+            }
+        },
         onClick = { onActExecute(result) }
     )
     // Action chips for message/call — subordinate, never competing in weight

@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
 import com.aura.design.auraFocusRing
+import com.aura.platform.AppIcon
 
 /**
  * ResultItem — single actionable row. Shared anatomy for all result types:
@@ -104,6 +105,7 @@ fun ResultIconPlaceholder(label: String, modifier: Modifier = Modifier) {
 @Composable
 fun AppResult(
     appName: String,
+    packageName: String? = null,
     selected: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -111,6 +113,13 @@ fun AppResult(
     ResultItem(
         title = appName,
         selected = selected,
+        icon = {
+            if (packageName != null) {
+                AppIcon(packageName = packageName, label = appName, contentDescription = appName)
+            } else {
+                ResultIconPlaceholder(appName)
+            }
+        },
         onClick = onClick,
         modifier = modifier
     )
