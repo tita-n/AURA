@@ -17,6 +17,7 @@ import com.aura.resolver.L0Index
 import com.aura.resolver.L0IndexFactory
 import com.aura.resolver.L0Resolver
 import com.aura.resolver.l1.L1Resolver
+import com.aura.resolver.l2.L2Resolver
 import com.aura.ui.home.HomeScreen
 import androidx.compose.foundation.isSystemInDarkTheme
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +39,7 @@ class MainActivity : ComponentActivity() {
                 // Contacts/settings remain from demo catalog; only apps are replaced with real launchable apps.
                 val context = androidx.compose.ui.platform.LocalContext.current
                 var currentIndex by remember { mutableStateOf(L0IndexFactory.demoIndex()) }
-                var router by remember { mutableStateOf(IntentRouter(L0Resolver(currentIndex), L1Resolver(currentIndex))) }
+                var router by remember { mutableStateOf(IntentRouter(L0Resolver(currentIndex), L1Resolver(currentIndex), L2Resolver(currentIndex))) }
 
                 // Explicit load off-main-thread — no polling, no WorkManager, no loops (Phase 1.5)
                 LaunchedEffect(Unit) {
@@ -50,7 +51,7 @@ class MainActivity : ComponentActivity() {
                     if (realApps.isNotEmpty()) {
                         val newIndex = L0IndexFactory.buildIndex(realApps)
                         currentIndex = newIndex
-                        router = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex))
+                        router = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex))
                     }
                 }
 
