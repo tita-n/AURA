@@ -11,11 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
 import com.aura.domain.*
+import com.aura.resolver.IntentRouter
+import com.aura.resolver.L0IndexFactory
+import com.aura.resolver.L0Resolver
 import com.aura.ui.home.HomeScreen
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,29 +28,24 @@ class MainActivity : ComponentActivity() {
                 var focused by remember { mutableStateOf(false) }
                 var isResolving by remember { mutableStateOf(false) }
 
-                // Demo shell logic — maps query to fake ACT/ASK to showcase patterns
-                // No resolver layers are invoked; this is purely UI shell demonstration.
-                // The mapping is deterministic and does not expose any layer identity.
+                // L0 Exact Index — built once, queried cheaply (<10ms) on every keystroke.
+                // Index is in-memory for v0.1; platform provider will replace demo data via WorkManager later.
+                val router = remember { IntentRouter(L0Resolver(L0IndexFactory.demoIndex())) }
+
+                // Real L0 routing — produces only Act/Ask/Idle/Empty/Error, no provenance.
                 LaunchedEffect(query) {
+                    if (query == "resolving") {
+                        isResolving = true
+                        commandState = CommandState.Idle
+                        return@LaunchedEffect
+                    }
+                    isResolving = false
                     commandState = when {
                         query.isBlank() -> CommandState.Idle
+                        // Keep explicit error demo for preview — L0 itself never returns Error for no-match
                         query.equals("error", ignoreCase = true) -> CommandState.Error(PreviewData.errorExample)
-                        query.equals("empty", ignoreCase = true) -> CommandState.Empty(query)
-                        query.contains("sarah", ignoreCase = true) && query.contains("which", ignoreCase = true) ->
-                            CommandState.Ask(PreviewData.askWhichSarah)
-                        query.contains("sarah", ignoreCase = true) -> CommandState.Act(PreviewData.actContactWithChips)
-                        query.matches(Regex(".*\\d+\\s*[\\*x]\\s*\\d+.*")) -> CommandState.Act(PreviewData.actMath)
-                        query.contains("alarm", ignoreCase = true) -> CommandState.Act(PreviewData.actAlarm)
-                        query.contains("chrome", ignoreCase = true) -> CommandState.Act(PreviewData.actApp)
-                        query == "ask" -> CommandState.Ask(PreviewData.askChooseAction)
-                        query == "related" -> CommandState.Ask(PreviewData.askRelated)
-                        query == "resolving" -> {
-                            isResolving = true
-                            CommandState.Idle
-                        }
-                        else -> CommandState.Empty(query)
+                        else -> router.routeToCommandState(query)
                     }
-                    if (query != "resolving") isResolving = false
                 }
 
                 Box(
