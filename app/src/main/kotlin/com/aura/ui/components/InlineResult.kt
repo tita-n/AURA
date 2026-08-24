@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
+import com.aura.design.auraFocusRing
 import kotlinx.coroutines.delay
 
 /**
@@ -50,6 +51,7 @@ fun InlineResult(
                 onCopy()
                 copied = true
             }
+            .auraFocusRing(androidx.compose.foundation.shape.RoundedCornerShape(AuraTheme.radius.small))
             .semantics { contentDescription = "$value, result for $query" }
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)

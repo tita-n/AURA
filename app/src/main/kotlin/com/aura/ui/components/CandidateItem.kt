@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
+import com.aura.design.auraFocusRing
 
 /**
  * CandidateItem — one option in an ambiguity set (ASK pattern).
@@ -38,6 +39,7 @@ fun CandidateItem(
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(AuraTheme.radius.small))
             .background(colors.surfaceRaised)
             .clickable(role = Role.Button, onClick = onClick)
+            .auraFocusRing(androidx.compose.foundation.shape.RoundedCornerShape(AuraTheme.radius.small))
             .semantics { contentDescription = desc }
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

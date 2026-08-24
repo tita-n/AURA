@@ -2,9 +2,11 @@ package com.aura.design
 
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.aura.R
 
 /**
  * Typography — Inter Variable locked in Design Direction §1.6.
@@ -18,8 +20,11 @@ import androidx.compose.ui.unit.sp
  * Tabular numerals: enabled via fontFeatureSettings = "tnum" for NumericResult.
  */
 object AuraTypographyTokens {
-    // Inter Variable — single family, variable axis. Fallback to Default until asset added.
-    val Inter: FontFamily = FontFamily.Default
+    // Inter Variable — bundled as res/font/inter_variable.ttf, variable axis handles 400/500
+    val Inter: FontFamily = FontFamily(
+        Font(R.font.inter_variable, FontWeight.Normal),
+        Font(R.font.inter_variable, FontWeight.Medium)
+    )
 
     val Display = TextStyle(
         fontFamily = Inter,
@@ -62,11 +67,7 @@ object AuraTypographyTokens {
         fontSize = 28.sp,
         lineHeight = 32.sp,
         letterSpacing = 0.sp,
-        // tabular figures to prevent jitter — requires fontFeatureSettings
-        // Compose TextStyle doesn't expose fontFeatureSettings directly pre-1.6,
-        // we document it and enable via platform Typography when available.
-        // For now, keep letterSpacing 0 and note that Inter's tnum will be enabled
-        // once font asset with 'tnum' feature is bundled.
+        fontFeatureSettings = "tnum"
     )
     val Caption = TextStyle(
         fontFamily = Inter,

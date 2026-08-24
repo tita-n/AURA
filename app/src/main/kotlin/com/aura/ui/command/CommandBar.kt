@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
+import com.aura.design.auraFocusRing
 
 /**
  * CommandBar — AURA's primary interaction surface. OS control surface, not a search box.
@@ -68,6 +69,7 @@ fun CommandBar(
             .clip(RoundedCornerShape(AuraTheme.radius.large))
             .background(bg.copy(alpha = if (focused) 1f else alpha))
             .border(1.dp, borderColor.copy(alpha = if (focused) 1f else 0f), RoundedCornerShape(AuraTheme.radius.large))
+            .auraFocusRing(RoundedCornerShape(AuraTheme.radius.large))
             .semantics { contentDescription = "Command bar" }
             .padding(horizontal = if (focused) 20.dp else 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

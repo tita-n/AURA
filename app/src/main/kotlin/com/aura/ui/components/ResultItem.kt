@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
+import com.aura.design.auraFocusRing
 
 /**
  * ResultItem — single actionable row. Shared anatomy for all result types:
@@ -43,6 +44,7 @@ fun ResultItem(
             .clip(AuraTheme.radius.small.let { androidx.compose.foundation.shape.RoundedCornerShape(it) })
             .background(bg)
             .clickable(role = Role.Button, onClick = onClick)
+            .auraFocusRing(androidx.compose.foundation.shape.RoundedCornerShape(AuraTheme.radius.small))
             .semantics { contentDescription = contentDesc }
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

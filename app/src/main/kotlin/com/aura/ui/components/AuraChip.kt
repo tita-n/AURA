@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
+import com.aura.design.auraFocusRing
 
 /**
  * AuraChip — unified primitive with semantic variants (Design Direction §8.4 locked).
@@ -63,6 +64,7 @@ fun AuraChip(
             .background(bg)
             .border(1.dp, borderColor, RoundedCornerShape(AuraTheme.radius.small))
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .auraFocusRing(RoundedCornerShape(AuraTheme.radius.small))
             .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {

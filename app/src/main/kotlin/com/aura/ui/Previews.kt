@@ -127,3 +127,34 @@ fun PreviewHomeLargeFont() {
         }
     }
 }
+
+@Preview(name = "Typography — Inter Variable", showBackground = true, backgroundColor = 0xFF0A0A0B)
+@Composable
+fun PreviewTypography() {
+    AuraTheme(darkTheme = true) {
+        Column(
+            modifier = Modifier.background(AuraTheme.colors.surfaceBase).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            androidx.compose.material3.Text("09:41", style = AuraTheme.typography.display, color = AuraTheme.colors.textPrimary)
+            androidx.compose.material3.Text("Search anything", style = AuraTheme.typography.commandInput, color = AuraTheme.colors.textPrimary)
+            androidx.compose.material3.Text("Sarah — WhatsApp", style = AuraTheme.typography.resultPrimary, color = AuraTheme.colors.textPrimary)
+            androidx.compose.material3.Text("Standard result row with Body", style = AuraTheme.typography.body, color = AuraTheme.colors.textPrimary)
+            androidx.compose.material3.Text("13,500", style = AuraTheme.typography.numericResult, color = AuraTheme.colors.textPrimary)
+            androidx.compose.material3.Text("Tuesday, 14 May — Caption secondary", style = AuraTheme.typography.caption, color = AuraTheme.colors.textSecondary)
+            androidx.compose.material3.Text("ACTIONS — LABEL uppercase +4% tracking", style = AuraTheme.typography.label, color = AuraTheme.colors.textSecondary)
+        }
+    }
+}
+
+@Preview(name = "Typography — Inter Tabular Check", showBackground = true, backgroundColor = 0xFF0A0A0B)
+@Composable
+fun PreviewTypographyTabular() {
+    AuraTheme(darkTheme = true) {
+        Column(modifier = Modifier.background(AuraTheme.colors.surfaceBase).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.Text("11111", style = AuraTheme.typography.numericResult, color = AuraTheme.colors.textPrimary)
+            androidx.compose.material3.Text("88888", style = AuraTheme.typography.numericResult, color = AuraTheme.colors.textPrimary)
+            androidx.compose.material3.Text("Tabular tnum prevents jitter", style = AuraTheme.typography.caption, color = AuraTheme.colors.textSecondary)
+        }
+    }
+}
