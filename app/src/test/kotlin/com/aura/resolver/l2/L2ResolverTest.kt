@@ -176,7 +176,7 @@ class L2ResolverTest {
 
     @Test fun `L2 reuse existing IndexedEntity no duplicate catalog`() {
         // Verify that L2 uses same index, not duplicate list
-        val chromeViaL2 = l2.resolve("chrom") as L2Result.Resolved
+        val chromeViaL2 = l2.resolve("chorme") as L2Result.Resolved
         val chromeViaL0 = l0.resolve("chrome") as L0Resolution.Resolved
         assertEquals(chromeViaL2.result.id, chromeViaL0.result.id)
         assertEquals(chromeViaL2.result.title, chromeViaL0.result.title)

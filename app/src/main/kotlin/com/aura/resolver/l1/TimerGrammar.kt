@@ -17,6 +17,16 @@ class TimerGrammar : L1Grammar {
         val trimmed = raw.trim()
         // Must start with timer — otherwise Unrecognized (let other grammars try)
         if (!trimmed.lowercase().startsWith("timer")) return L1Result.Unrecognized
+
+        // Distinguish recognized-but-invalid from unrecognized L2 phrasings:
+        // - "timer 10" / "timer 10 lightyears" / "timer 0 min" -> number present -> Invalid (recognized, bad value)
+        // - "timer for 10 minutes" / "timer of 5 secs"         -> filler word   -> Unrecognized (L2 semantic variant)
+        val rest = trimmed.lowercase().removePrefix("timer").trim()
+        if (rest.isEmpty()) return L1Result.Unrecognized
+        val firstToken = rest.split(Regex("\\s+"))[0]
+        val startsWithNumber = Regex("^\\d").containsMatchIn(firstToken)
+        if (!startsWithNumber) return L1Result.Unrecognized
+
         val m = pattern.matchEntire(trimmed) ?: pattern.matchEntire(normalized) ?: return L1Result.Invalid("Invalid timer format. Use: timer 10 min")
         val numStr = m.groupValues[1]
         val unitStr = m.groupValues[2].lowercase()
