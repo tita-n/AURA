@@ -69,35 +69,55 @@ object L0IndexFactory {
         )
     }
 
+    fun demoApps(): List<IndexedEntity> = listOf(
+        appEntity("com.android.chrome", "Chrome"),
+        appEntity("com.whatsapp", "WhatsApp"),
+        appEntity("com.google.android.gm", "Gmail"),
+        appEntity("com.spotify.music", "Spotify"),
+        appEntity("com.example.calculator", "Calculator")
+    )
+
+    fun demoContacts(): List<IndexedEntity> = listOf(
+        contactEntity("1", "Sarah", "sarah.okafor@email.com"),
+        contactEntity("2", "Sarah", "called yesterday"),
+        contactEntity("3", "Sarah M.", "mobile"),
+        contactEntity("4", "Dad", "mobile"),
+        contactEntity("5", "Mum", "mobile")
+    )
+
+    fun demoSettings(): List<IndexedEntity> = listOf(
+        settingsEntity("wifi", "Wi-Fi", "Network"),
+        settingsEntity("wifi_settings", "Wi-Fi settings", "Network"),
+        settingsEntity("bluetooth", "Bluetooth"),
+        settingsEntity("bluetooth_settings", "Bluetooth settings"),
+        settingsEntity("display", "Display"),
+        settingsEntity("display_settings", "Display settings"),
+        settingsEntity("sound", "Sound"),
+        settingsEntity("sound_settings", "Sound settings")
+    )
+
     /**
      * Build a demo index with realistic sample data for UI wiring and previews.
-     * This is the v0.1 in-memory index — platform will replace with real PackageManager data
-     * via L0IndexFactory.build(platformApps + platformContacts + settingsCatalog).
+     * This is the v0.1 in-memory index — platform will replace demoApps with real apps.
      */
     fun demoIndex(): L0Index {
         val entities = mutableListOf<IndexedEntity>()
-        // Apps
-        entities += appEntity("com.android.chrome", "Chrome")
-        entities += appEntity("com.whatsapp", "WhatsApp")
-        entities += appEntity("com.google.android.gm", "Gmail")
-        entities += appEntity("com.spotify.music", "Spotify")
-        entities += appEntity("com.example.calculator", "Calculator")
-        // Contacts — note duplicate "Sarah" to exercise ASK
-        entities += contactEntity("1", "Sarah", "sarah.okafor@email.com")
-        entities += contactEntity("2", "Sarah", "called yesterday")
-        entities += contactEntity("3", "Sarah M.", "mobile")
-        entities += contactEntity("4", "Dad", "mobile")
-        entities += contactEntity("5", "Mum", "mobile")
-        // Settings — deterministic only (include both base and "settings" suffixed forms for L1)
-        entities += settingsEntity("wifi", "Wi-Fi", "Network")
-        entities += settingsEntity("wifi_settings", "Wi-Fi settings", "Network")
-        entities += settingsEntity("bluetooth", "Bluetooth")
-        entities += settingsEntity("bluetooth_settings", "Bluetooth settings")
-        entities += settingsEntity("display", "Display")
-        entities += settingsEntity("display_settings", "Display settings")
-        entities += settingsEntity("sound", "Sound")
-        entities += settingsEntity("sound_settings", "Sound settings")
+        entities += demoApps()
+        entities += demoContacts()
+        entities += demoSettings()
         return L0Index.build(entities)
+    }
+
+    /**
+     * Build index from composable sources — allows real apps to replace demo apps
+     * while preserving contacts/settings. Example: realApps + demoContacts() + demoSettings()
+     */
+    fun buildIndex(
+        apps: List<IndexedEntity>,
+        contacts: List<IndexedEntity> = demoContacts(),
+        settings: List<IndexedEntity> = demoSettings()
+    ): L0Index {
+        return L0Index.build(apps + contacts + settings)
     }
 
     fun settingsCatalog(): List<IndexedEntity> = listOf(

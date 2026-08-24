@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
 import com.aura.domain.*
+import com.aura.platform.AndroidAppIndexProvider
 import com.aura.resolver.IntentRouter
 import com.aura.resolver.L0Index
 import com.aura.resolver.L0IndexFactory
@@ -18,6 +19,8 @@ import com.aura.resolver.L0Resolver
 import com.aura.resolver.l1.L1Resolver
 import com.aura.ui.home.HomeScreen
 import androidx.compose.foundation.isSystemInDarkTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,13 +33,29 @@ class MainActivity : ComponentActivity() {
                 var focused by remember { mutableStateOf(false) }
                 var isResolving by remember { mutableStateOf(false) }
 
-                // L0 + L1 — built once, queried cheaply (L0 <10ms, L1 <5ms) on every keystroke.
-                // Index is in-memory for v0.1; platform provider will replace demo data via WorkManager later.
-                val index = remember { L0IndexFactory.demoIndex() }
-                val router = remember { IntentRouter(L0Resolver(index), L1Resolver(index)) }
+                // Real Android app index — PackageManager off-main-thread, L0Index built once per dataset.
+                // Flow: AndroidAppIndexProvider (IO) -> List<IndexedEntity> -> L0Index.build() -> L0Resolver/L1Resolver -> IntentRouter.
+                // Contacts/settings remain from demo catalog; only apps are replaced with real launchable apps.
+                val context = androidx.compose.ui.platform.LocalContext.current
+                var currentIndex by remember { mutableStateOf(L0IndexFactory.demoIndex()) }
+                var router by remember { mutableStateOf(IntentRouter(L0Resolver(currentIndex), L1Resolver(currentIndex))) }
 
-                // Real L0 routing — produces only Act/Ask/Idle/Empty/Error, no provenance.
-                LaunchedEffect(query) {
+                // Explicit load off-main-thread — no polling, no WorkManager, no loops (Phase 1.5)
+                LaunchedEffect(Unit) {
+                    val realApps = withContext(Dispatchers.IO) {
+                        try {
+                            AndroidAppIndexProvider(context.applicationContext).getAppEntities()
+                        } catch (_: Exception) { emptyList() }
+                    }
+                    if (realApps.isNotEmpty()) {
+                        val newIndex = L0IndexFactory.buildIndex(realApps)
+                        currentIndex = newIndex
+                        router = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex))
+                    }
+                }
+
+                // Real routing — re-evaluates when query or router (after real index load) changes
+                LaunchedEffect(query, router) {
                     if (query == "resolving") {
                         isResolving = true
                         commandState = CommandState.Idle
