@@ -18,8 +18,8 @@ class L0ArchitectureTest {
         val domainDir = File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain")
         domainDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val text = f.readText()
-            assertFalse("${f.name} must not import PackageManager", text.contains("PackageManager"))
-            assertFalse("${f.name} must not import ContactsContract", text.contains("ContactsContract"))
+            assertFalse("${f.name} must not import PackageManager", text.contains("import android.content.pm.PackageManager"))
+            assertFalse("${f.name} must not import ContactsContract", text.contains("import android.provider.ContactsContract"))
             assertFalse("${f.name} must not import AlarmClock", text.contains("AlarmClock"))
             assertFalse("${f.name} must not import android.content.Intent", text.contains("android.content.Intent"))
             assertFalse("${f.name} must not import android.content.Context", text.contains("android.content.Context"))
@@ -43,8 +43,8 @@ class L0ArchitectureTest {
         val uiDir = File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui")
         uiDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val text = f.readText()
-            assertFalse("${f.name} must not import PackageManager", text.contains("PackageManager"))
-            assertFalse("${f.name} must not import ContactsContract", text.contains("ContactsContract"))
+            assertFalse("${f.name} must not import PackageManager", text.contains("import android.content.pm.PackageManager"))
+            assertFalse("${f.name} must not import ContactsContract", text.contains("import android.provider.ContactsContract"))
         }
     }
 

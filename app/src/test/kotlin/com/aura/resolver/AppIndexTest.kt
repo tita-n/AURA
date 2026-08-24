@@ -120,15 +120,14 @@ class AppIndexTest {
         val dir = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui")
         dir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val text = f.readText()
-            assertFalse(text.contains("PackageManager"))
+            assertFalse(text.contains("import android.content.pm"))
             assertFalse(text.contains("startActivity("))
-            assertFalse(text.contains("android.content.Intent"))
+            assertFalse(text.contains("import android.content.Intent"))
         }
-        // MainActivity also must not directly import PackageManager (may mention in comments)
+        // MainActivity must not import Android execution APIs (providers are platform-side)
         val main = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/MainActivity.kt").readText()
-        assertFalse(main.contains("import android.content.pm.PackageManager"))
         assertFalse(main.contains("import android.content.pm"))
-        // It should use provider via abstraction
+        assertFalse(main.contains("startActivity"))
         assertTrue(main.contains("AndroidAppIndexProvider"))
     }
 

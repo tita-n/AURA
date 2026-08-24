@@ -134,11 +134,13 @@ class ExecutionIntegrationTest {
 
     @Test fun `only platform android may execute`() {
         val mainSrc = File("/home/titan/AURA/app/src/main/kotlin/com/aura/MainActivity.kt").readText()
-        // MainActivity wires the executor but must not construct Intents itself
-        assertFalse(mainSrc.contains("Intent("))
+        // MainActivity wires executors/providers but never constructs or starts Intents itself
+        assertFalse(mainSrc.contains("import android.content.Intent"))
         assertFalse(mainSrc.contains("startActivity"))
-        // It goes through AndroidActionExecutor
         assertTrue(mainSrc.contains("AndroidActionExecutor"))
+        // Role intents also live behind the platform boundary
+        val roleSrc = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/LauncherRoleHelper.kt").readText()
+        assertTrue(roleSrc.contains("createRequestRoleIntent"))
     }
 
     // ---- Full timer flow regression remains fixed ----

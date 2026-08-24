@@ -1,5 +1,6 @@
 package com.aura
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -27,7 +28,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.rememberCoroutineScope
 import com.aura.platform.android.AndroidActionExecutor
 import com.aura.platform.android.ExecutionResult
+import com.aura.platform.android.PackageChangeMonitor
 import com.aura.resolver.l3.ValidatedAction
+import com.aura.ui.library.AppLibraryScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -151,11 +154,57 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // ---- Launcher role (PRD \u00a716): detect, offer once per process, never nag after grant/dismissal
+                // Android owns the decision; AURA only asks via LauncherRoleHelper.
+                var isDefault by remember { mutableStateOf(com.aura.platform.android.LauncherRoleHelper.isDefaultHome(context)) }
+                var roleBannerDismissed by remember { mutableStateOf(false) }
+
+                val roleLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+                ) { isDefault = com.aura.platform.android.LauncherRoleHelper.isDefaultHome(context) }
+
+                fun requestDefaultHome() {
+                    val intent = com.aura.platform.android.LauncherRoleHelper.createRequestIntent(context)
+                        ?: com.aura.platform.android.LauncherRoleHelper.homeSettingsIntent()
+                    roleLauncher.launch(intent)
+                }
+
+                // ---- App Library + package-change refresh (event-driven, no polling)
+                var showLibrary by remember { mutableStateOf(false) }
+
+                DisposableEffect(context) {
+                    val monitor = PackageChangeMonitor(context.applicationContext) {
+                        scope.launch {
+                            val apps = withContext(Dispatchers.IO) {
+                                try { AndroidAppIndexProvider(context.applicationContext).getAppEntities() } catch (_: Exception) { emptyList<com.aura.resolver.IndexedEntity>() }
+                            }
+                            val contacts = if (contactsGranted) withContext(Dispatchers.IO) {
+                                try { contactProvider.getContactEntities() } catch (_: Exception) { emptyList<com.aura.resolver.IndexedEntity>() }
+                            } else emptyList()
+                            val newIndex = L0IndexFactory.buildIndex(apps, contacts = contacts)
+                            currentIndexState.value = newIndex
+                            routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
+                        }
+                    }
+                    monitor.register()
+                    onDispose { monitor.unregister() }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(AuraTheme.colors.surfaceBase)
                 ) {
+                    if (showLibrary) {
+                        AppLibraryScreen(
+                            apps = currentIndexState.value.allEntities(),
+                            onLaunch = { result ->
+                                showLibrary = false
+                                executeValidated(result) // same L3+executor path as Command Bar
+                            },
+                            onClose = { showLibrary = false }
+                        )
+                    } else {
                     HomeScreen(
                         commandState = commandState,
                         isResolving = isResolving,
@@ -259,8 +308,13 @@ class MainActivity : ComponentActivity() {
                             if (current is CommandState.Act) {
                                 executeValidated(current.result)
                             }
-                        }
+                        },
+                        showDefaultHomeBanner = !isDefault && !roleBannerDismissed,
+                        onSetAsDefault = { requestDefaultHome() },
+                        onDismissRoleBanner = { roleBannerDismissed = true },
+                        onOpenLibrary = { showLibrary = true }
                     )
+                    }
                 }
             }
         }

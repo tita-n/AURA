@@ -1,16 +1,22 @@
 package com.aura.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
 import com.aura.domain.*
+import com.aura.ui.components.AuraChip
+import com.aura.ui.components.ChipVariant
 import com.aura.ui.command.CommandBar
 import com.aura.ui.command.CommandStateHost
 import java.text.SimpleDateFormat
@@ -38,7 +44,11 @@ fun HomeScreen(
     onActionChipClick: (ActionChipData) -> Unit = {},
     onCopy: (String) -> Unit = {},
     onUndo: () -> Unit = {},
-    onSubmit: () -> Unit = {}
+    onSubmit: () -> Unit = {},
+    showDefaultHomeBanner: Boolean = false,
+    onSetAsDefault: () -> Unit = {},
+    onDismissRoleBanner: () -> Unit = {},
+    onOpenLibrary: () -> Unit = {}
 ) {
     val colors = AuraTheme.colors
     val typography = AuraTheme.typography
@@ -92,6 +102,47 @@ fun HomeScreen(
         }
 
         Spacer(modifier = Modifier.weight(1f))
+
+        // Role banner — minimal, session-scoped dismissal, Android owns the actual decision.
+        if (showDefaultHomeBanner) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Make AURA your Home",
+                    style = typography.caption,
+                    color = colors.textSecondary,
+                    modifier = Modifier.weight(1f)
+                )
+                AuraChip(variant = ChipVariant.Action("Set as default"), onClick = onSetAsDefault)
+                AuraChip(variant = ChipVariant.Secondary("Not now"), onClick = onDismissRoleBanner)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Swipe-up / tap zone → App Library (accessible non-gesture route included).
+        // Deliberately bounded between Presence and Command Bar so it never fights the
+        // results scroll area, IME, or system gesture insets.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1.2f)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { _, dragAmount ->
+                        if (dragAmount < -24) onOpenLibrary() // upward swipe threshold
+                    }
+                }
+                .clickable(role = Role.Button, onClick = onOpenLibrary),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "⌃  Apps",
+                style = typography.caption,
+                color = colors.textSecondary.copy(alpha = 0.6f)
+            )
+        }
 
         // Resolution surface — expands upward above CommandBar, ≤70% cap
         // When idle/empty, this renders as silence (no content)
