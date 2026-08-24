@@ -129,15 +129,52 @@ class MainActivity : ComponentActivity() {
                         },
                         onCandidateSelect = { candidate ->
                             // Collapse ASK → ACT (that transition IS confirmation, DL §15)
-                            commandState = CommandState.Act(
-                                ResolvedResult(
+                            // For app candidates (Did you mean), directly show and execute the chosen app
+                            val isApp = candidate.id.startsWith("app:")
+                            val isSettings = candidate.id.startsWith("settings:")
+                            val result = when {
+                                isApp -> {
+                                    val pkg = candidate.id.removePrefix("app:")
+                                    ResolvedResult(
+                                        id = candidate.id,
+                                        title = candidate.title,
+                                        subtitle = candidate.disambiguation,
+                                        type = ResultType.App,
+                                        action = AuraAction.OpenApp(pkg)
+                                    )
+                                }
+                                isSettings -> {
+                                    val key = candidate.id.removePrefix("settings:")
+                                    ResolvedResult(
+                                        id = candidate.id,
+                                        title = candidate.title,
+                                        subtitle = candidate.disambiguation,
+                                        type = ResultType.Settings,
+                                        action = AuraAction.OpenSettings(key)
+                                    )
+                                }
+                                else -> ResolvedResult(
                                     id = candidate.id,
                                     title = candidate.title,
                                     subtitle = candidate.disambiguation,
                                     type = ResultType.Contact,
                                     action = AuraAction.NoOp
                                 )
-                            )
+                            }
+                            commandState = CommandState.Act(result)
+                            // For apps/settings, execute immediately on selection (one-tap open)
+                            if (isApp || isSettings) {
+                                scope.launch {
+                                    val validation = L3Validator(currentIndexState.value).validate(result)
+                                    if (validation is com.aura.resolver.l3.L3ValidationResult.Validated) {
+                                        when (val exec = executor.execute(validation.action)) {
+                                            is ExecutionResult.Failure -> commandState = CommandState.Error(CommandError(exec.message))
+                                            is ExecutionResult.Unavailable -> commandState = CommandState.Empty(query)
+                                            else -> {}
+                                        }
+                                    }
+                                }
+                            }
                         },
                         onActionChipClick = { chip ->
                             // Secondary chips are subordinate — for now treat as no-op execution boundary check
