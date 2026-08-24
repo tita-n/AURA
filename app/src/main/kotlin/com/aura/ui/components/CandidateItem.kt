@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
 import com.aura.design.auraFocusRing
+import com.aura.platform.AppIcon
 
 /**
  * CandidateItem — one option in an ambiguity set (ASK pattern).
@@ -25,6 +26,7 @@ import com.aura.design.auraFocusRing
 fun CandidateItem(
     title: String,
     disambiguation: String? = null,
+    id: String? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -52,11 +54,16 @@ fun CandidateItem(
                 .background(colors.surfaceBase),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = title.take(1).uppercase(),
-                style = typography.caption,
-                color = colors.textSecondary
-            )
+            if (id != null && id.startsWith("app:")) {
+                val pkg = id.removePrefix("app:")
+                AppIcon(packageName = pkg, label = title, contentDescription = title)
+            } else {
+                Text(
+                    text = title.take(1).uppercase(),
+                    style = typography.caption,
+                    color = colors.textSecondary
+                )
+            }
         }
         Column(
             modifier = Modifier.weight(1f),

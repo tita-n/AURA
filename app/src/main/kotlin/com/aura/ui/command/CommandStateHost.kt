@@ -160,6 +160,7 @@ private fun AskContent(
             CandidateItem(
                 title = candidate.title,
                 disambiguation = candidate.disambiguation ?: candidate.subtitle,
+                id = candidate.id,
                 onClick = { onCandidateSelect(candidate) }
             )
         }
