@@ -21,7 +21,12 @@ import com.aura.resolver.l2.L2Resolver
 import com.aura.resolver.l3.L3Validator
 import com.aura.ui.home.HomeScreen
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.rememberCoroutineScope
+import com.aura.platform.android.AndroidActionExecutor
+import com.aura.platform.android.ExecutionResult
+import com.aura.resolver.l3.ValidatedAction
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
@@ -39,6 +44,8 @@ class MainActivity : ComponentActivity() {
                 // Flow: AndroidAppIndexProvider (IO) -> List<IndexedEntity> -> L0Index.build() -> L0Resolver/L1Resolver -> IntentRouter.
                 // Contacts/settings remain from demo catalog; only apps are replaced with real launchable apps.
                 val context = androidx.compose.ui.platform.LocalContext.current
+                val scope = rememberCoroutineScope()
+                val executor = remember(context) { AndroidActionExecutor(context.applicationContext) }
                 val currentIndexState = remember { mutableStateOf(L0IndexFactory.demoIndex()) }
                 val routerState = remember {
                     val idx = currentIndexState.value
@@ -91,7 +98,35 @@ class MainActivity : ComponentActivity() {
                             query.isNotBlank() -> null
                             else -> "Good morning" // deterministic Presence, silence valid when typing
                         },
-                        onActExecute = { /* shell: no execution */ },
+                        onActExecute = { result ->
+                            // Explicit user activation only — never on typing
+                            // NO VALIDATED ACTION → NO EXECUTION
+                            scope.launch {
+                                val validation = L3Validator(currentIndexState.value).validate(result)
+                                when (validation) {
+                                    is com.aura.resolver.l3.L3ValidationResult.Validated -> {
+                                        when (val exec = executor.execute(validation.action)) {
+                                            is ExecutionResult.Success -> {
+                                                // Success uses existing inline confirmation / success tint — no new state
+                                                // For OpenApp, system will switch; for Copy, InlineResult already shows Copied
+                                            }
+                                            is ExecutionResult.Failure -> {
+                                                commandState = CommandState.Error(CommandError(exec.message))
+                                            }
+                                            is ExecutionResult.Unavailable -> {
+                                                commandState = CommandState.Empty(query)
+                                            }
+                                        }
+                                    }
+                                    is com.aura.resolver.l3.L3ValidationResult.Invalid -> {
+                                        commandState = CommandState.Error(CommandError(validation.message))
+                                    }
+                                    is com.aura.resolver.l3.L3ValidationResult.Unavailable -> {
+                                        commandState = CommandState.Empty(query)
+                                    }
+                                }
+                            }
+                        },
                         onCandidateSelect = { candidate ->
                             // Collapse ASK → ACT (that transition IS confirmation, DL §15)
                             commandState = CommandState.Act(
@@ -104,8 +139,24 @@ class MainActivity : ComponentActivity() {
                                 )
                             )
                         },
-                        onActionChipClick = { },
-                        onCopy = {}
+                        onActionChipClick = { chip ->
+                            // Secondary chips are subordinate — for now treat as no-op execution boundary check
+                            // Future: map chip to ValidatedAction based on parent result + chip label
+                        },
+                        onCopy = { text ->
+                            scope.launch {
+                                val copyResult = ResolvedResult(
+                                    id = "copy:${text.hashCode()}",
+                                    title = text,
+                                    type = ResultType.Math,
+                                    action = AuraAction.Copy(text)
+                                )
+                                val validation = L3Validator(currentIndexState.value).validate(copyResult)
+                                if (validation is com.aura.resolver.l3.L3ValidationResult.Validated) {
+                                    executor.execute(validation.action)
+                                }
+                            }
+                        }
                     )
                 }
             }

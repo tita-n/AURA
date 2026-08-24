@@ -17,7 +17,7 @@ import com.aura.resolver.l3.ValidatedAction
 sealed interface ExecutionResult {
     data object Success : ExecutionResult
     data class Failure(val message: String) : ExecutionResult
-    data object RequiresPermission : ExecutionResult
+    data object Unavailable : ExecutionResult
 }
 
 interface ActionExecutor {
@@ -37,7 +37,10 @@ class AndroidActionExecutor(
             is AuraAction.Dial -> executeDial(a)
             is AuraAction.SendMessage -> executeSendMessage(a)
             is AuraAction.SendEmail -> executeSendEmail(a)
-            else -> ExecutionResult.Success // Copy, NoOp etc. require no Android execution
+            is AuraAction.Copy -> executeCopy(a)
+            is AuraAction.OpenCalculator -> executeOpenCalculator(a)
+            is AuraAction.SearchPlayStore -> executeSearchPlayStore(a)
+            is AuraAction.NoOp -> ExecutionResult.Success
         }
     }
 
@@ -116,5 +119,34 @@ class AndroidActionExecutor(
 
     private fun executeSendEmail(action: AuraAction.SendEmail): ExecutionResult {
         return ExecutionResult.Success
+    }
+
+    private fun executeCopy(action: AuraAction.Copy): ExecutionResult {
+        return try {
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("AURA", action.text)
+            clipboard.setPrimaryClip(clip)
+            ExecutionResult.Success
+        } catch (e: Exception) {
+            ExecutionResult.Failure("Copy failed")
+        }
+    }
+
+    private fun executeOpenCalculator(action: AuraAction.OpenCalculator): ExecutionResult {
+        // Calculator is just a copy + optional launch — for now treat as success (copy already handled)
+        return ExecutionResult.Success
+    }
+
+    private fun executeSearchPlayStore(action: AuraAction.SearchPlayStore): ExecutionResult {
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                data = android.net.Uri.parse("https://play.google.com/store/search?q=${android.net.Uri.encode(action.query)}&c=apps")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            ExecutionResult.Success
+        } catch (e: Exception) {
+            ExecutionResult.Failure("Cannot open Play Store")
+        }
     }
 }
