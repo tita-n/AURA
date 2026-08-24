@@ -18,6 +18,7 @@ import com.aura.resolver.L0IndexFactory
 import com.aura.resolver.L0Resolver
 import com.aura.resolver.l1.L1Resolver
 import com.aura.resolver.l2.L2Resolver
+import com.aura.resolver.l3.L3Validator
 import com.aura.ui.home.HomeScreen
 import androidx.compose.foundation.isSystemInDarkTheme
 import kotlinx.coroutines.Dispatchers
@@ -38,8 +39,11 @@ class MainActivity : ComponentActivity() {
                 // Flow: AndroidAppIndexProvider (IO) -> List<IndexedEntity> -> L0Index.build() -> L0Resolver/L1Resolver -> IntentRouter.
                 // Contacts/settings remain from demo catalog; only apps are replaced with real launchable apps.
                 val context = androidx.compose.ui.platform.LocalContext.current
-                var currentIndex by remember { mutableStateOf(L0IndexFactory.demoIndex()) }
-                var router by remember { mutableStateOf(IntentRouter(L0Resolver(currentIndex), L1Resolver(currentIndex), L2Resolver(currentIndex))) }
+                val currentIndexState = remember { mutableStateOf(L0IndexFactory.demoIndex()) }
+                val routerState = remember {
+                    val idx = currentIndexState.value
+                    mutableStateOf(IntentRouter(L0Resolver(idx), L1Resolver(idx), L2Resolver(idx), L3Validator(idx)))
+                }
 
                 // Explicit load off-main-thread — no polling, no WorkManager, no loops (Phase 1.5)
                 LaunchedEffect(Unit) {
@@ -50,13 +54,13 @@ class MainActivity : ComponentActivity() {
                     }
                     if (realApps.isNotEmpty()) {
                         val newIndex = L0IndexFactory.buildIndex(realApps)
-                        currentIndex = newIndex
-                        router = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex))
+                        currentIndexState.value = newIndex
+                        routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
                     }
                 }
 
                 // Real routing — re-evaluates when query or router (after real index load) changes
-                LaunchedEffect(query, router) {
+                LaunchedEffect(query, routerState.value) {
                     if (query == "resolving") {
                         isResolving = true
                         commandState = CommandState.Idle
@@ -67,7 +71,7 @@ class MainActivity : ComponentActivity() {
                         query.isBlank() -> CommandState.Idle
                         // Keep explicit error demo for preview — L0 itself never returns Error for no-match
                         query.equals("error", ignoreCase = true) -> CommandState.Error(PreviewData.errorExample)
-                        else -> router.routeToCommandState(query)
+                        else -> routerState.value.routeToCommandState(query)
                     }
                 }
 
