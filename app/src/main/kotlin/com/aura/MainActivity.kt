@@ -66,6 +66,31 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Single explicit-execution path: proposal -> L3 validation -> ValidatedAction -> executor.
+                // Called ONLY from explicit user events (Act tap, ACTION chip, Enter on pre-selected Act).
+                fun executeValidated(result: ResolvedResult) {
+                    scope.launch {
+                        when (val validation = L3Validator(currentIndexState.value).validate(result)) {
+                            is com.aura.resolver.l3.L3ValidationResult.Validated -> {
+                                when (val exec = executor.execute(validation.action)) {
+                                    is ExecutionResult.Success -> {
+                                        // Execution itself is the success interaction for app-launching
+                                        // actions; Copy/Timer keep their existing inline confirmation.
+                                    }
+                                    is ExecutionResult.Failure ->
+                                        commandState = CommandState.Error(CommandError(exec.message))
+                                    is ExecutionResult.Unavailable ->
+                                        commandState = CommandState.Empty(query)
+                                }
+                            }
+                            is com.aura.resolver.l3.L3ValidationResult.Invalid ->
+                                commandState = CommandState.Error(CommandError(validation.message))
+                            is com.aura.resolver.l3.L3ValidationResult.Unavailable ->
+                                commandState = CommandState.Empty(query)
+                        }
+                    }
+                }
+
                 // Real routing — re-evaluates when query or router (after real index load) changes
                 LaunchedEffect(query, routerState.value) {
                     if (query == "resolving") {
@@ -101,31 +126,7 @@ class MainActivity : ComponentActivity() {
                         onActExecute = { result ->
                             // Explicit user activation only — never on typing
                             // NO VALIDATED ACTION → NO EXECUTION
-                            scope.launch {
-                                val validation = L3Validator(currentIndexState.value).validate(result)
-                                when (validation) {
-                                    is com.aura.resolver.l3.L3ValidationResult.Validated -> {
-                                        when (val exec = executor.execute(validation.action)) {
-                                            is ExecutionResult.Success -> {
-                                                // Success uses existing inline confirmation / success tint — no new state
-                                                // For OpenApp, system will switch; for Copy, InlineResult already shows Copied
-                                            }
-                                            is ExecutionResult.Failure -> {
-                                                commandState = CommandState.Error(CommandError(exec.message))
-                                            }
-                                            is ExecutionResult.Unavailable -> {
-                                                commandState = CommandState.Empty(query)
-                                            }
-                                        }
-                                    }
-                                    is com.aura.resolver.l3.L3ValidationResult.Invalid -> {
-                                        commandState = CommandState.Error(CommandError(validation.message))
-                                    }
-                                    is com.aura.resolver.l3.L3ValidationResult.Unavailable -> {
-                                        commandState = CommandState.Empty(query)
-                                    }
-                                }
-                            }
+                            executeValidated(result)
                         },
                         onCandidateSelect = { candidate ->
                             // Collapse ASK → ACT (that transition IS confirmation, DL §15)
@@ -177,8 +178,15 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onActionChipClick = { chip ->
-                            // Secondary chips are subordinate — for now treat as no-op execution boundary check
-                            // Future: map chip to ValidatedAction based on parent result + chip label
+                            // Explicit execution event: chip maps to a sibling action of the same
+                            // validated parent; still passes through L3 before executing.
+                            val current = commandState
+                            if (current is CommandState.Act) {
+                                ActionChipMapper.map(current.result, chip)?.let { mapped ->
+                                    commandState = CommandState.Act(mapped)
+                                    executeValidated(mapped)
+                                }
+                            }
                         },
                         onCopy = { text ->
                             scope.launch {
@@ -192,6 +200,20 @@ class MainActivity : ComponentActivity() {
                                 if (validation is com.aura.resolver.l3.L3ValidationResult.Validated) {
                                     executor.execute(validation.action)
                                 }
+                            }
+                        },
+                        onUndo = {
+                            // Dismisses the inline confirmation — returns to idle (DL §15).
+                            // Never claims system-timer cancellation AURA cannot perform.
+                            commandState = CommandState.Idle
+                            query = ""
+                        },
+                        onSubmit = {
+                            // Design Direction: top result is pre-selected — Enter executes it.
+                            // Only an existing ACT may execute; typing alone never does.
+                            val current = commandState
+                            if (current is CommandState.Act) {
+                                executeValidated(current.result)
                             }
                         }
                     )

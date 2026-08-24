@@ -33,6 +33,7 @@ fun CommandStateHost(
     onCandidateSelect: (CandidateItemData) -> Unit,
     onActionChipClick: (ActionChipData) -> Unit,
     onCopy: (String) -> Unit,
+    onUndo: () -> Unit = {},
     onFallback: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -65,7 +66,8 @@ fun CommandStateHost(
                     result = state.result,
                     onActExecute = onActExecute,
                     onActionChipClick = onActionChipClick,
-                    onCopy = onCopy
+                    onCopy = onCopy,
+                    onUndo = onUndo
                 )
             }
             is CommandState.Ask -> {
@@ -97,7 +99,8 @@ private fun ActContent(
     result: ResolvedResult,
     onActExecute: (ResolvedResult) -> Unit,
     onActionChipClick: (ActionChipData) -> Unit,
-    onCopy: (String) -> Unit
+    onCopy: (String) -> Unit,
+    onUndo: () -> Unit
 ) {
     // Inline results are the completed action, not a link
     if (result.type == ResultType.Math || result.type == ResultType.Conversion) {
@@ -112,7 +115,9 @@ private fun ActContent(
     if (result.type == ResultType.Alarm || result.type == ResultType.Timer) {
         InlineConfirmation(
             phrase = result.title,
-            onUndo = { /* shell: no-op, future will route to Action Layer */ }
+            // Undo dismisses the confirmation and returns to idle — AURA cannot identify
+            // the exact system timer to cancel, so it never claims cancellation.
+            onUndo = onUndo
         )
         return
     }

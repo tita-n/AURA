@@ -36,7 +36,9 @@ fun HomeScreen(
     onActExecute: (ResolvedResult) -> Unit = {},
     onCandidateSelect: (CandidateItemData) -> Unit = {},
     onActionChipClick: (ActionChipData) -> Unit = {},
-    onCopy: (String) -> Unit = {}
+    onCopy: (String) -> Unit = {},
+    onUndo: () -> Unit = {},
+    onSubmit: () -> Unit = {}
 ) {
     val colors = AuraTheme.colors
     val typography = AuraTheme.typography
@@ -101,6 +103,7 @@ fun HomeScreen(
                 onCandidateSelect = onCandidateSelect,
                 onActionChipClick = onActionChipClick,
                 onCopy = onCopy,
+                onUndo = onUndo,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
@@ -123,7 +126,7 @@ fun HomeScreen(
                 internalQuery = ""
                 onQueryChange("")
             },
-            onSubmit = {},
+            onSubmit = onSubmit,
             modifier = Modifier.fillMaxWidth()
         )
 

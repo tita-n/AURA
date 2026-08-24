@@ -83,6 +83,7 @@ class AndroidActionExecutor(
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         return try {
+            if (intent.resolveActivity(context.packageManager) == null) return ExecutionResult.Unavailable
             context.startActivity(intent)
             ExecutionResult.Success
         } catch (e: Exception) {
@@ -98,6 +99,7 @@ class AndroidActionExecutor(
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         return try {
+            if (intent.resolveActivity(context.packageManager) == null) return ExecutionResult.Unavailable
             context.startActivity(intent)
             ExecutionResult.Success
         } catch (e: Exception) {
@@ -106,19 +108,67 @@ class AndroidActionExecutor(
     }
 
     private fun executeDial(action: AuraAction.Dial): ExecutionResult {
-        // Dial via ACTION_DIAL — no CALL_PHONE permission needed, user confirms in dialer
-        // For validation phase, we don't actually execute; this is the boundary where execution would happen
-        // Actual dial execution is deferred until explicit user confirmation in UI
-        return ExecutionResult.Success
+        // PRD §9.2: hand off via ACTION_DIAL — no CALL_PHONE permission; user confirms in dialer.
+        // AURA never places the call itself. No number is fabricated from user text.
+        return try {
+            val pm = context.packageManager
+            val intent = Intent(Intent.ACTION_DIAL).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent.resolveActivity(pm) == null) return ExecutionResult.Unavailable
+            context.startActivity(intent)
+            ExecutionResult.Success
+        } catch (e: Exception) {
+            ExecutionResult.Failure("Dialer unavailable")
+        }
     }
 
     private fun executeSendMessage(action: AuraAction.SendMessage): ExecutionResult {
-        // Messaging execution requires chooser — deferred; validation already ensures contact exists
-        return ExecutionResult.Success
+        // Composer hand-off only — AURA never claims delivery. Channel contract:
+        // default/message/sms -> smsto: composer (body preserved); whatsapp -> WhatsApp send flow;
+        // unknown channel cannot execute safely -> Failure.
+        return try {
+            val pm = context.packageManager
+            when (action.channel.lowercase()) {
+                "default", "message", "sms" -> {
+                    val intent = Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:")).apply {
+                        action.message?.let { putExtra("sms_body", it) }
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    if (intent.resolveActivity(pm) == null) return ExecutionResult.Unavailable
+                    context.startActivity(intent)
+                    ExecutionResult.Success
+                }
+                "whatsapp" -> {
+                    val launch = pm.getLaunchIntentForPackage("com.whatsapp")
+                        ?: return ExecutionResult.Unavailable
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(launch)
+                    ExecutionResult.Success
+                }
+                else -> ExecutionResult.Failure("Unsupported channel")
+            }
+        } catch (e: Exception) {
+            ExecutionResult.Failure("Messaging unavailable")
+        }
     }
 
     private fun executeSendEmail(action: AuraAction.SendEmail): ExecutionResult {
-        return ExecutionResult.Success
+        // mailto composer hand-off via ACTION_SENDTO — never claims delivery.
+        return try {
+            val pm = context.packageManager
+            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                data = android.net.Uri.parse("mailto:")
+                action.subject?.let { putExtra(Intent.EXTRA_SUBJECT, it) }
+                action.body?.let { putExtra(Intent.EXTRA_TEXT, it) }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent.resolveActivity(pm) == null) return ExecutionResult.Unavailable
+            context.startActivity(intent)
+            ExecutionResult.Success
+        } catch (e: Exception) {
+            ExecutionResult.Failure("Email unavailable")
+        }
     }
 
     private fun executeCopy(action: AuraAction.Copy): ExecutionResult {
@@ -133,8 +183,30 @@ class AndroidActionExecutor(
     }
 
     private fun executeOpenCalculator(action: AuraAction.OpenCalculator): ExecutionResult {
-        // Calculator is just a copy + optional launch — for now treat as success (copy already handled)
-        return ExecutionResult.Success
+        // Deterministic calculator lookup — known calculator packages only.
+        // No fabricated support: if none is launchable -> Unavailable.
+        val knownPackages = listOf(
+            "com.android.calculator2",
+            "com.google.android.calculator",
+            "com.oneplus.calculator",
+            "com.sec.android.app.popupcalculator",
+            "com.miui.calculator",
+            "com.transsion.calculator"
+        )
+        val pm = context.packageManager
+        for (pkg in knownPackages) {
+            val launch = pm.getLaunchIntentForPackage(pkg)
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                return try {
+                    context.startActivity(launch)
+                    ExecutionResult.Success
+                } catch (e: Exception) {
+                    continue
+                }
+            }
+        }
+        return ExecutionResult.Unavailable
     }
 
     private fun executeSearchPlayStore(action: AuraAction.SearchPlayStore): ExecutionResult {
