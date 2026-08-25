@@ -11,6 +11,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,6 +49,7 @@ fun AppLibraryScreen(
     val sections = remember(filtered) { AppLibraryLogic.sections(filtered) }
     val rail = remember(sections) { AppLibraryLogic.railLetters(sections) }
 
+    val haptics = LocalHapticFeedback.current
     val listState = rememberLazyListState()
 
     // Jump to section when a rail letter is picked
@@ -73,13 +76,16 @@ fun AppLibraryScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Apps", style = typography.title, color = colors.textPrimary)
-            AuraChip(variant = ChipVariant.Secondary("Close"), onClick = onClose)
+            AuraChip(variant = ChipVariant.Secondary("Close"), onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClose()
+            })
         }
         Spacer(Modifier.height(12.dp))
 
         Box(Modifier.weight(1f)) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                item(key = "search") {
+                item(key = "search", contentType = "search") {
                     Column {
                         LibrarySearchField(
                             query = searchQuery,
@@ -89,7 +95,7 @@ fun AppLibraryScreen(
                     }
                 }
                 if (filtered.isEmpty()) {
-                    item(key = "empty") {
+                    item(key = "empty", contentType = "empty") {
                         Text(
                             "No matches",
                             style = typography.caption,
@@ -103,7 +109,7 @@ fun AppLibraryScreen(
                     filtered.forEachIndexed { idx, app ->
                         val letter = AppLibraryLogic.sectionLetterFor(app.displayLabel)
                         if (letter != lastLetter) {
-                            item(key = "hdr:$letter:$idx") {
+                            item(key = "hdr:$letter:$idx", contentType = "header") {
                                 Text(
                                     letter,
                                     style = typography.label,
@@ -113,10 +119,11 @@ fun AppLibraryScreen(
                             }
                             lastLetter = letter
                         }
-                        item(key = app.id) {
+                        item(key = app.id, contentType = "app") {
                             LibraryAppRow(
                                 app = app,
                                 onClick = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onLaunch(
                                         ResolvedResult(
                                             id = app.id,
@@ -130,7 +137,7 @@ fun AppLibraryScreen(
                             )
                         }
                     }
-                    item(key = "bottomPad") { Spacer(Modifier.height(24.dp)) }
+                    item(key = "bottomPad", contentType = "pad") { Spacer(Modifier.height(24.dp)) }
                 }
             }
 
@@ -216,7 +223,7 @@ private fun LibraryAppRow(app: IndexedEntity, onClick: () -> Unit) {
                 .background(colors.surfaceBase),
             contentAlignment = Alignment.Center
         ) {
-            AppIcon(packageName = pkg, label = app.displayLabel, contentDescription = null)
+            AppIcon(packageName = pkg, label = app.displayLabel, contentDescription = null, iconSize = 32.dp, modifier = Modifier.clip(CircleShape))
         }
         Text(app.displayLabel, style = AuraTheme.typography.body, color = colors.textPrimary, maxLines = 1)
     }

@@ -1,5 +1,7 @@
 package com.aura.ui.home
 
+import android.app.WallpaperManager
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,15 +16,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.graphics.drawable.toBitmap
 import com.aura.design.AuraTheme
 import com.aura.design.auraFocusRing
 import com.aura.domain.*
@@ -101,17 +108,21 @@ fun HomeScreen(
     val appByPackage: Map<String, IndexedEntity> = remember(appIndex) {
         appIndex.associateBy { it.id.removePrefix("app:") }
     }
+    val haptics = LocalHapticFeedback.current
 
     Box(Modifier.fillMaxSize()) {
-        // Wallpaper layer — only when enabled; flat scrim preserves contrast
         if (wallpaperEnabled) {
-            WallpaperScrimLayer(timeTextColor = colors.textPrimary)
+            WallpaperBackground(Modifier.fillMaxSize())
+            // Flat scrim — 82% keeps wallpaper visible (18% show-through) while holding 4.5:1
+            // for textPrimary on white wallpapers (math in PRODUCT.md). Light theme scrim is
+            // nearly opaque already; dark theme scrim is where visibility matters.
+            Box(Modifier.fillMaxSize().background(colors.surfaceBase.copy(alpha = 0.82f)))
         }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(colors.surfaceBase.copy(alpha = if (wallpaperEnabled) 0.06f else 1f))
+                .background(if (wallpaperEnabled) androidx.compose.ui.graphics.Color.Transparent else colors.surfaceBase)
                 .padding(horizontal = AuraTheme.spacing.screenEdge)
                 .statusBarsPadding()
                 .navigationBarsPadding(),
@@ -123,8 +134,11 @@ fun HomeScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        detectTapGestures(onLongPress = { onOpenEdit() })
+                    .pointerInput(haptics) {
+                        detectTapGestures(onLongPress = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onOpenEdit()
+                        })
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -142,8 +156,11 @@ fun HomeScreen(
                 val listModifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .pointerInput(Unit) {
-                        detectTapGestures(onLongPress = { onOpenEdit() })
+                    .pointerInput(haptics) {
+                        detectTapGestures(onLongPress = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onOpenEdit()
+                        })
                     }
                 LazyColumn(
                     modifier = listModifier,
@@ -195,7 +212,10 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 40.dp)
-                    .clickable(role = Role.Button, onClick = onOpenLibrary),
+                    .clickable(role = Role.Button, onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onOpenLibrary()
+                    }),
                 contentAlignment = Alignment.Center
             ) {
                 Text("⌃  Apps", style = typography.caption, color = colors.textSecondary.copy(alpha = 0.6f))
@@ -222,12 +242,18 @@ fun HomeScreen(
                 focused = internalFocused,
                 onFocusedChange = { internalFocused = it; onFocusedChange(it) },
                 onClear = { internalQuery = ""; onQueryChange("") },
-                onSubmit = onSubmit,
+                onSubmit = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onSubmit()
+                },
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(12.dp))
-            DockBar(dock = dock, appByPackage = appByPackage, onLaunch = onDockLaunch)
+            DockBar(dock = dock, appByPackage = appByPackage, onLaunch = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onDockLaunch(it)
+            })
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -243,7 +269,9 @@ private fun TimeAndPresenceBlock(
     val typography = AuraTheme.typography
     val timeText = remember(nowMillis) { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(nowMillis)) }
     val dateText = remember(nowMillis) { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date(nowMillis)) }
-    val secondary = if (wallpaperEnabled) colors.textPrimary.copy(alpha = 0.72f) else colors.textSecondary
+    // When wallpaper is visible, all home text uses textPrimary so contrast holds with 82% scrim.
+    // At 72% alpha secondary fails on white wallpapers; primary is the safe choice.
+    val secondary = if (wallpaperEnabled) colors.textPrimary else colors.textSecondary
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(timeText, style = typography.display, color = colors.textPrimary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(4.dp))
@@ -415,13 +443,21 @@ private fun DockBar(
             val label = entity?.displayLabel ?: item.packageName.substringAfterLast(".")
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
-                    Modifier.size(56.dp).clip(CircleShape).background(colors.surfaceRaised)
-                        .border(1.dp, colors.borderSubtle, CircleShape)
+                    Modifier.size(56.dp)
+                        .clip(CircleShape)
                         .clickable(role = Role.Button, onClick = { onLaunch(item.packageName) })
                         .auraFocusRing(CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    AppIcon(packageName = item.packageName, label = label, contentDescription = label, modifier = Modifier)
+                    // Icon fills the circle edge-to-edge — no inset background.
+                    // Was 24dp inside 56dp (tiny); now 56dp fills the circle as users expect.
+                    AppIcon(
+                        packageName = item.packageName,
+                        label = label,
+                        contentDescription = label,
+                        modifier = Modifier.clip(CircleShape),
+                        iconSize = 54.dp
+                    )
                 }
                 if (dock.size <= 3) {
                     Spacer(Modifier.height(4.dp))
@@ -433,11 +469,34 @@ private fun DockBar(
 }
 
 @Composable
-private fun WallpaperScrimLayer(timeTextColor: androidx.compose.ui.graphics.Color) {
-    // Wallpaper lives behind Home content; system wallpaper is managed by the OS.
-    // The flat scrim (surfaceBase at ~94% alpha) preserves AA contrast vs any wallpaper.
-    // Drawn as a background behind the entire Home column.
-    Box(Modifier.fillMaxSize().background(AuraTheme.colors.surfaceBase.copy(alpha = 0.94f)))
+@android.annotation.SuppressLint("MissingPermission")
+private fun WallpaperBackground(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var bitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    LaunchedEffect(Unit) {
+        val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val wm = WallpaperManager.getInstance(context)
+                val d = try { wm.drawable } catch (_: Exception) { null } ?: return@withContext null
+                // Scale down to screen width to avoid OOM; wallpaper can be 2-4k.
+                val b = d.toBitmap(1080, 1920)
+                b.asImageBitmap()
+            } catch (_: Exception) { null }
+        }
+        if (bmp != null) bitmap = bmp
+    }
+    val bmp = bitmap
+    if (bmp != null) {
+        Image(
+            bitmap = bmp,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+        )
+    } else {
+        // Fallback: solid surface so home never flashes transparent
+        Box(modifier.background(AuraTheme.colors.surfaceBase))
+    }
 }
 
 @Composable
