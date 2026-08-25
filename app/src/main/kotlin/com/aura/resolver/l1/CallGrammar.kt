@@ -6,6 +6,7 @@ import com.aura.domain.CandidateItemData
 import com.aura.domain.ResolvedResult
 import com.aura.domain.ResultType
 import com.aura.resolver.EntityCategory
+import com.aura.resolver.TargetPatterns
 import com.aura.resolver.L0Index
 import com.aura.resolver.Normalizer
 
@@ -23,6 +24,21 @@ class CallGrammar(
         val m = pattern.matchEntire(raw.trim()) ?: pattern.matchEntire(normalized) ?: return L1Result.Unrecognized
         val nameRaw = m.groupValues[1].trim()
         if (nameRaw.isEmpty()) return L1Result.Invalid("Missing contact name")
+
+        // Direct number dial — "call +15551234567" / "call 555 123 4567":
+        // deterministic phone-shaped text dials that number without a contact.
+        if (TargetPatterns.isPhoneLike(nameRaw)) {
+            return L1Result.Resolved(
+                ResolvedResult(
+                    id = "dial:${nameRaw.replace(" ", "")}",
+                    title = nameRaw,
+                    subtitle = null,
+                    type = ResultType.Call,
+                    action = AuraAction.Dial(phoneNumber = nameRaw)
+                )
+            )
+        }
+
         val nameNorm = Normalizer.normalize(nameRaw)
         if (nameNorm.isEmpty()) return L1Result.Invalid("Invalid name")
 

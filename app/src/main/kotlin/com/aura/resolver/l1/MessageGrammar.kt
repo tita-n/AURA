@@ -8,6 +8,7 @@ import com.aura.domain.ResultType
 import com.aura.resolver.EntityCategory
 import com.aura.resolver.L0Index
 import com.aura.resolver.Normalizer
+import com.aura.resolver.TargetPatterns
 
 /**
  * Message — message Sarah, text Sarah, tell Sarah I'll be there in 20
@@ -41,6 +42,27 @@ class MessageGrammar(
         }
         if (remainder == null) return L1Result.Unrecognized
         if (remainder.isEmpty()) return L1Result.Invalid("Missing recipient")
+
+        // Direct number message — "message +15551234567 hello": first token phone-shaped
+        // -> composer to that number; remaining words become the body.
+        val firstToken = remainder.trim().split(Regex("\\s+"))[0]
+        if (TargetPatterns.isPhoneLike(firstToken)) {
+            val body = remainder.trim().removePrefix(firstToken).trim().takeIf { it.isNotBlank() }
+            return L1Result.Resolved(
+                ResolvedResult(
+                    id = "sms:${firstToken.replace(" ", "")}",
+                    title = firstToken,
+                    subtitle = body?.let { "\"$it\"" },
+                    type = ResultType.Message,
+                    action = AuraAction.SendMessage(
+                        contactId = "",
+                        channel = "default",
+                        message = body,
+                        phone = firstToken
+                    )
+                )
+            )
+        }
 
         // Resolve contact + optional message via longest prefix match
         val (entity, message) = resolveContactWithMessage(remainder) ?: return L1Result.Unrecognized

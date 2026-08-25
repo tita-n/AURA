@@ -8,6 +8,7 @@ import com.aura.domain.ResultType
 import com.aura.resolver.EntityCategory
 import com.aura.resolver.L0Index
 import com.aura.resolver.Normalizer
+import com.aura.resolver.TargetPatterns
 
 /**
  * Email semantic matcher — email Sarah, send email to Sarah, mail Sarah
@@ -29,6 +30,20 @@ class EmailMatcher(private val index: L0Index) {
         }
         if (remainder == null) return L2Result.Unrecognized
         if (remainder.isEmpty()) return L2Result.Invalid("Missing recipient")
+
+        val firstTokE = remainder.trim().split(Regex("\\s+"))[0]
+        if (TargetPatterns.isEmailLike(firstTokE)) {
+            val eBody = remainder.trim().removePrefix(firstTokE).trim().takeIf { it.isNotBlank() }
+            return L2Result.Resolved(
+                ResolvedResult(
+                    id = "email:${firstTokE.lowercase()}",
+                    title = firstTokE,
+                    subtitle = eBody?.let { "\"$it\"" },
+                    type = ResultType.Email,
+                    action = AuraAction.SendEmail(contactId = "", emailAddress = firstTokE, body = eBody)
+                )
+            )
+        }
         val (entity, body) = resolveContactWithBody(remainder) ?: return L2Result.Unrecognized
         val normRecipient = Normalizer.normalize(entity.displayLabel)
         val allForName = index.lookup(normRecipient).let { r ->

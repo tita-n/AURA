@@ -4,6 +4,7 @@ import com.aura.domain.AuraAction
 import com.aura.domain.ResolvedResult
 import com.aura.resolver.EntityCategory
 import com.aura.resolver.L0Index
+import com.aura.resolver.TargetPatterns
 
 /**
  * L3 Deterministic Action Layer — validates proposed AuraAction against deterministic Android reality.
@@ -58,8 +59,13 @@ class L3Validator(
     }
 
     private fun validateDial(action: AuraAction.Dial, result: ResolvedResult): L3ValidationResult {
-        val contactId = action.contactId?.trim() ?: ""
-        if (contactId.isBlank()) return L3ValidationResult.Invalid("Invalid contact")
+        // Direct number dial — "call 555 123 4567": deterministic shape check, no contact needed.
+        if (action.contactId.isNullOrBlank()) {
+            return if (TargetPatterns.isPhoneLike(action.phoneNumber))
+                L3ValidationResult.Validated(ValidatedAction(result))
+            else L3ValidationResult.Invalid("Invalid phone number")
+        }
+        val contactId = action.contactId.trim()
         val entity = index.allEntities().firstOrNull {
             it.id == "contact:$contactId" || it.id.removePrefix("contact:") == contactId
         } ?: return L3ValidationResult.Invalid("Contact not found")
@@ -70,6 +76,17 @@ class L3Validator(
     }
 
     private fun validateSendMessage(action: AuraAction.SendMessage, result: ResolvedResult): L3ValidationResult {
+        // Direct number message — "message 555 123 4567 hi": sms-family channels only;
+        // WhatsApp to a non-contact cannot be executed safely.
+        if (action.contactId.isBlank()) {
+            val channel = action.channel.lowercase()
+            if (channel !in setOf("default", "message", "sms")) {
+                return L3ValidationResult.Invalid("Unsupported channel")
+            }
+            return if (!action.phone.isNullOrBlank() && TargetPatterns.isPhoneLike(action.phone))
+                L3ValidationResult.Validated(ValidatedAction(result))
+            else L3ValidationResult.Invalid("Invalid phone number")
+        }
         val contactId = action.contactId.trim()
         if (contactId.isBlank()) return L3ValidationResult.Invalid("Invalid contact")
         val entity = index.allEntities().firstOrNull {
@@ -92,6 +109,12 @@ class L3Validator(
     }
 
     private fun validateSendEmail(action: AuraAction.SendEmail, result: ResolvedResult): L3ValidationResult {
+        // Direct address email — "email someone@example.com": deterministic shape check.
+        if (action.contactId.isBlank()) {
+            return if (!action.emailAddress.isNullOrBlank() && TargetPatterns.isEmailLike(action.emailAddress))
+                L3ValidationResult.Validated(ValidatedAction(result))
+            else L3ValidationResult.Invalid("Invalid email address")
+        }
         val contactId = action.contactId.trim()
         if (contactId.isBlank()) return L3ValidationResult.Invalid("Invalid contact")
         val entity = index.allEntities().firstOrNull {

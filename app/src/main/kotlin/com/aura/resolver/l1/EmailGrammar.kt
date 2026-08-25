@@ -8,6 +8,7 @@ import com.aura.domain.ResultType
 import com.aura.resolver.EntityCategory
 import com.aura.resolver.L0Index
 import com.aura.resolver.Normalizer
+import com.aura.resolver.TargetPatterns
 
 /**
  * Email — email Sarah, send an email to Sarah, email Sarah hello
@@ -31,6 +32,21 @@ class EmailGrammar(
         }
         if (remainder == null) return L1Result.Unrecognized
         if (remainder.isEmpty()) return L1Result.Invalid("Missing recipient")
+
+        // Direct address email — "email someone@example.com [body]": first token email-shaped.
+        val firstTokenE = remainder.trim().split(Regex("\\s+"))[0]
+        if (TargetPatterns.isEmailLike(firstTokenE)) {
+            val eBody = remainder.trim().removePrefix(firstTokenE).trim().takeIf { it.isNotBlank() }
+            return L1Result.Resolved(
+                ResolvedResult(
+                    id = "email:${firstTokenE.lowercase()}",
+                    title = firstTokenE,
+                    subtitle = eBody?.let { "\"$it\"" },
+                    type = ResultType.Email,
+                    action = AuraAction.SendEmail(contactId = "", emailAddress = firstTokenE, body = eBody)
+                )
+            )
+        }
 
         val (entity, body) = resolveContactWithBody(remainder) ?: return L1Result.Unrecognized
 

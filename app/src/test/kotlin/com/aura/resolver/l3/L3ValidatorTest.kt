@@ -41,7 +41,9 @@ class L3ValidatorTest {
     }
 
     @Test fun `4 unknown contact Dial to failure`() {
-        val res = ResolvedResult("contact:999", "Unknown", type = ResultType.Call, action = AuraAction.Dial("999"))
+        // Contact-referencing dial to a nonexistent contact id -> Invalid
+        val res = ResolvedResult("contact:999", "Unknown", type = ResultType.Call,
+            action = AuraAction.Dial("+1000000999", contactId = "999"))
         assertTrue(validator.validate(res) is L3ValidationResult.Invalid)
     }
 

@@ -8,6 +8,7 @@ import com.aura.domain.ResultType
 import com.aura.resolver.EntityCategory
 import com.aura.resolver.L0Index
 import com.aura.resolver.Normalizer
+import com.aura.resolver.TargetPatterns
 
 /**
  * Message semantic matcher — handles "send sarah a message", "whatsapp sarah", etc.
@@ -33,6 +34,21 @@ class MessageMatcher(private val index: L0Index) {
         }
         if (remainder == null) return L2Result.Unrecognized
         if (remainder.isEmpty()) return L2Result.Invalid("Missing recipient")
+
+        // Direct number message — same contract as L1 grammar.
+        val firstTok = remainder.trim().split(Regex("\\s+"))[0]
+        if (TargetPatterns.isPhoneLike(firstTok)) {
+            val body = remainder.trim().removePrefix(firstTok).trim().takeIf { it.isNotBlank() }
+            return L2Result.Resolved(
+                ResolvedResult(
+                    id = "sms:${firstTok.replace(" ", "")}",
+                    title = firstTok,
+                    subtitle = body?.let { "\"$it\"" },
+                    type = ResultType.Message,
+                    action = AuraAction.SendMessage("", "default", body, phone = firstTok)
+                )
+            )
+        }
 
         // Resolve contact with optional message body
         val (entity, message) = resolveContactWithMessage(remainder) ?: return L2Result.Unrecognized
