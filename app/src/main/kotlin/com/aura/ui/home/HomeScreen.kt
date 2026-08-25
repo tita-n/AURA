@@ -1,7 +1,5 @@
 package com.aura.ui.home
 
-import android.app.WallpaperManager
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,9 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -29,7 +25,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.graphics.drawable.toBitmap
 import com.aura.design.AuraTheme
 import com.aura.design.auraFocusRing
 import com.aura.domain.*
@@ -112,10 +107,9 @@ fun HomeScreen(
 
     Box(Modifier.fillMaxSize()) {
         if (wallpaperEnabled) {
-            WallpaperBackground(Modifier.fillMaxSize())
-            // Flat scrim — 82% keeps wallpaper visible (18% show-through) while holding 4.5:1
-            // for textPrimary on white wallpapers (math in PRODUCT.md). Light theme scrim is
-            // nearly opaque already; dark theme scrim is where visibility matters.
+            // Wallpaper is the Window behind the activity (FLAG_SHOW_WALLPAPER in MainActivity).
+            // This scrim tints it so textPrimary still hits 4.5:1 on white wallpapers
+            // (alpha 0.82 = 18% wallpaper show-through, math in PRODUCT.md).
             Box(Modifier.fillMaxSize().background(colors.surfaceBase.copy(alpha = 0.82f)))
         }
 
@@ -469,34 +463,10 @@ private fun DockBar(
 }
 
 @Composable
-@android.annotation.SuppressLint("MissingPermission")
 private fun WallpaperBackground(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    var bitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    LaunchedEffect(Unit) {
-        val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val wm = WallpaperManager.getInstance(context)
-                val d = try { wm.drawable } catch (_: Exception) { null } ?: return@withContext null
-                // Scale down to screen width to avoid OOM; wallpaper can be 2-4k.
-                val b = d.toBitmap(1080, 1920)
-                b.asImageBitmap()
-            } catch (_: Exception) { null }
-        }
-        if (bmp != null) bitmap = bmp
-    }
-    val bmp = bitmap
-    if (bmp != null) {
-        Image(
-            bitmap = bmp,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = modifier
-        )
-    } else {
-        // Fallback: solid surface so home never flashes transparent
-        Box(modifier.background(AuraTheme.colors.surfaceBase))
-    }
+    // Stub — wallpaper is now the Window behind the activity (FLAG_SHOW_WALLPAPER).
+    // Kept for layout stability; actual drawing is window-level, not Compose.
+    Box(modifier)
 }
 
 @Composable

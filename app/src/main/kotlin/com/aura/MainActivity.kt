@@ -74,6 +74,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // Wallpaper window flag — show system wallpaper behind AURA when enabled.
+            // Without this, Window background is opaque and wallpaper never shows (user report: black/white only).
+            val wallpaperEnabled = homeSettings.customization.showWallpaper
+            val activityWindow = (context as? android.app.Activity)?.window
+            LaunchedEffect(wallpaperEnabled, isDarkTheme) {
+                val w = activityWindow ?: return@LaunchedEffect
+                if (wallpaperEnabled) {
+                    w.addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+                    w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+                } else {
+                    w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+                    val bg = if (isDarkTheme) 0xFF0A0A0B.toInt() else 0xFFFAF9F6.toInt()
+                    w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(bg))
+                }
+            }
+
             // ---- Widget host ----
             val widgetHost = remember(context) { AuraWidgetHost(context.applicationContext) }
             val installedWidgetProviders by widgetHost.installed.collectAsState()
