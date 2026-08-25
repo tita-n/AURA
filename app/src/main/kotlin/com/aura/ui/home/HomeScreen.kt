@@ -45,6 +45,7 @@ fun HomeScreen(
     onCopy: (String) -> Unit = {},
     onUndo: () -> Unit = {},
     onSubmit: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     showDefaultHomeBanner: Boolean = false,
     onSetAsDefault: () -> Unit = {},
     onDismissRoleBanner: () -> Unit = {},
@@ -181,7 +182,24 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // Swipe-down / tap zone → Notification Panel (accessible non-gesture route).
+        // Bounded between Command Bar and Dock so it never fights IME or system gestures.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 32.dp)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { _, dragAmount ->
+                        if (dragAmount > 24) onOpenNotifications()
+                    }
+                }
+                .clickable(role = Role.Button, onClick = onOpenNotifications),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("⌄  Notifications", style = typography.caption, color = colors.textSecondary.copy(alpha = 0.6f))
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Dock — 4 icons, no labels (labels only if ≤3, per PRD 11)
         DockPlaceholder()

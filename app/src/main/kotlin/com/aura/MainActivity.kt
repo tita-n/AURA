@@ -31,6 +31,9 @@ import com.aura.platform.android.ExecutionResult
 import com.aura.platform.android.PackageChangeMonitor
 import com.aura.resolver.l3.ValidatedAction
 import com.aura.ui.library.AppLibraryScreen
+import com.aura.ui.notifications.NotificationPanelScreen
+import com.aura.platform.android.AndroidNotificationAccessManager
+import com.aura.platform.android.NotificationRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -171,6 +174,10 @@ class MainActivity : ComponentActivity() {
 
                 // ---- App Library + package-change refresh (event-driven, no polling)
                 var showLibrary by remember { mutableStateOf(false) }
+                var showNotifications by remember { mutableStateOf(false) }
+                val notifAccess = remember(context) { AndroidNotificationAccessManager(context.applicationContext) }
+                var notifGranted by remember { mutableStateOf(notifAccess.isAccessGranted()) }
+                val notificationItems by NotificationRepository.items.collectAsState()
 
                 DisposableEffect(context) {
                     val monitor = PackageChangeMonitor(context.applicationContext) {
@@ -195,7 +202,33 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .background(AuraTheme.colors.surfaceBase)
                 ) {
-                    if (showLibrary) {
+                    if (showNotifications) {
+                        // Re-check on each open — user may have toggled access in Settings.
+                        notifGranted = notifAccess.isAccessGranted()
+                        if (notifGranted) {
+                            // Mark visible keys as seen: only now has the user actually viewed them.
+                            LaunchedEffect(Unit) {
+                                NotificationRepository.markShown(notificationItems.map { it.key })
+                            }
+                        }
+                        NotificationPanelScreen(
+                            items = notificationItems,
+                            accessGranted = notifGranted,
+                            onRequestAccess = { notifAccess.launchSettings() },
+                            onOpenNotification = { item ->
+                                // Platform boundary executes the notification's own PendingIntent;
+                                // failure stays inside AURA with existing Error semantics.
+                                if (!NotificationRepository.open(item.key)) {
+                                    commandState = CommandState.Error(CommandError("Cannot open notification"))
+                                    showNotifications = false
+                                }
+                            },
+                            onDismissNotification = { item ->
+                                NotificationRepository.cancel(item.key)
+                            },
+                            onClose = { showNotifications = false }
+                        )
+                    } else if (showLibrary) {
                         AppLibraryScreen(
                             apps = currentIndexState.value.allEntities(),
                             onLaunch = { result ->
@@ -309,6 +342,7 @@ class MainActivity : ComponentActivity() {
                                 executeValidated(current.result)
                             }
                         },
+                        onOpenNotifications = { showNotifications = true },
                         showDefaultHomeBanner = !isDefault && !roleBannerDismissed,
                         onSetAsDefault = { requestDefaultHome() },
                         onDismissRoleBanner = { roleBannerDismissed = true },
