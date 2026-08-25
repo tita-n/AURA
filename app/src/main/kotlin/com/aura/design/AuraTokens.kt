@@ -81,6 +81,8 @@ object AuraMotion {
     // but state-change feedback itself is preserved.
 }
 
+val LocalReducedMotion = staticCompositionLocalOf { false }
+
 val LocalAuraSpacing = staticCompositionLocalOf { AuraSpacing }
 val LocalAuraRadius = staticCompositionLocalOf { AuraRadius }
 val LocalAuraElevation = staticCompositionLocalOf { AuraElevation }

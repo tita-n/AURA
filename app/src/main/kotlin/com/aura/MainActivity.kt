@@ -1,6 +1,5 @@
 package com.aura
 
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -10,344 +9,536 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.aura.design.AuraTheme
+import com.aura.design.LocalReducedMotion
 import com.aura.domain.*
+import com.aura.home.*
 import com.aura.platform.AndroidAppIndexProvider
 import com.aura.platform.android.AndroidContactIndexProvider
+import com.aura.platform.android.AuraPrefs
+import com.aura.platform.android.BatteryMonitor
+import com.aura.platform.android.MusicMonitor
+import com.aura.platform.android.NextEventProvider
+import com.aura.platform.android.AuraWidgetHost
+import com.aura.platform.android.WallpaperPicker
 import com.aura.resolver.IntentRouter
-import com.aura.resolver.L0Index
 import com.aura.resolver.L0IndexFactory
 import com.aura.resolver.L0Resolver
 import com.aura.resolver.l1.L1Resolver
 import com.aura.resolver.l2.L2Resolver
 import com.aura.resolver.l3.L3Validator
+import com.aura.home.EditSurface
+import com.aura.ui.home.HomeEditOverlay
 import com.aura.ui.home.HomeScreen
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.rememberCoroutineScope
 import com.aura.platform.android.AndroidActionExecutor
 import com.aura.platform.android.ExecutionResult
 import com.aura.platform.android.PackageChangeMonitor
-import com.aura.resolver.l3.ValidatedAction
 import com.aura.ui.library.AppLibraryScreen
-import com.aura.ui.notifications.NotificationPanelScreen
-import com.aura.platform.android.AndroidNotificationAccessManager
-import com.aura.platform.android.NotificationRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.viewinterop.AndroidView
+import android.os.Bundle as AndroidBundle
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            // Dark is default per spec, but respect system for accessibility verification
-            AuraTheme(darkTheme = isSystemInDarkTheme()) {
-                var query by remember { mutableStateOf("") }
-                var commandState: CommandState by remember { mutableStateOf(CommandState.Idle) }
-                var focused by remember { mutableStateOf(false) }
-                var isResolving by remember { mutableStateOf(false) }
-
-                // Real Android app index — PackageManager off-main-thread, L0Index built once per dataset.
-                // Contacts: contextual READ_CONTACTS (PRD §9.8) — loaded only when granted, off-main-thread.
-                // Index composition: realApps + realContacts(if granted) + settings. Denied => graceful:
-                // apps/calculator/settings/timer keep working; contact queries degrade to Empty.
-                val context = androidx.compose.ui.platform.LocalContext.current
-                val scope = rememberCoroutineScope()
-                val executor = remember(context) { AndroidActionExecutor(context.applicationContext) }
-                val contactProvider = remember(context) { AndroidContactIndexProvider(context.applicationContext) }
-
-                fun hasContactsPermission(): Boolean = contactProvider.hasContactsPermission()
-
-                var contactsGranted by remember { mutableStateOf(hasContactsPermission()) }
-                var contactsAskedOnce by remember { mutableStateOf(false) }
-                val currentIndexState = remember { mutableStateOf(L0IndexFactory.buildIndex(emptyList(), contacts = emptyList())) }
-                val routerState = remember {
-                    val idx = currentIndexState.value
-                    mutableStateOf(IntentRouter(L0Resolver(idx), L1Resolver(idx), L2Resolver(idx), L3Validator(idx)))
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            val executor = remember(context) { AndroidActionExecutor(context.applicationContext) }
+            val contactProvider = remember(context) { AndroidContactIndexProvider(context.applicationContext) }
+            val auraPrefs = remember(context) { AuraPrefs(context.applicationContext) }
+            val homeSettings by auraPrefs.settings.collectAsState()
+            val isDarkTheme = when (homeSettings.customization.themeMode) {
+                ThemeMode.Dark -> true
+                ThemeMode.Light -> false
+                ThemeMode.System -> isSystemInDarkTheme()
+            }
+            val reducedMotion = homeSettings.customization.animationIntensity == AnimationIntensity.Reduced
+            val accentOverride: Color? = when (val a = homeSettings.customization.accent) {
+                is AccentChoice.Dynamic -> null
+                is AccentChoice.Curated -> {
+                    val pair = AccentPalette.entries.getOrNull(a.index) ?: AccentPalette.entries.first()
+                    Color(if (isDarkTheme) pair.first else pair.second)
                 }
+            }
 
-                // Contextual permission request — Android's native dialog, triggered only by the first
-                // comms-style query. Never at install, never repeated after one ask.
-                val contactsPermissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) { granted ->
-                    contactsGranted = granted
-                    if (granted) {
-                        scope.launch {
-                            val contacts = withContext(Dispatchers.IO) {
-                                try { contactProvider.getContactEntities() } catch (_: Exception) { emptyList() }
-                            }
-                            val newIndex = L0IndexFactory.buildIndex(
-                                withContext(Dispatchers.IO) {
-                                    try { AndroidAppIndexProvider(context.applicationContext).getAppEntities() } catch (_: Exception) { emptyList() }
-                                },
-                                contacts = contacts
-                            )
-                            currentIndexState.value = newIndex
-                            routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
-                        }
-                    }
-                    // Denied: no nag, no rebuild — index stays without contacts; everything else works.
+            // ---- Widget host ----
+            val widgetHost = remember(context) { AuraWidgetHost(context.applicationContext) }
+            val installedWidgetProviders by widgetHost.installed.collectAsState()
+            val activityLifecycle = this@MainActivity.lifecycle
+            DisposableEffect(activityLifecycle) {
+                widgetHost.startListening()
+                val obs = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_START) widgetHost.startListening()
+                    if (event == Lifecycle.Event.ON_STOP) widgetHost.stopListening()
                 }
-
-                // Initial load — apps always; contacts only if already granted.
-                LaunchedEffect(contactsGranted) {
-                    val (realApps, contacts) = withContext(Dispatchers.IO) {
-                        val apps: List<com.aura.resolver.IndexedEntity> = try {
-                            AndroidAppIndexProvider(context.applicationContext).getAppEntities()
-                        } catch (_: Exception) { emptyList() }
-                        val cts: List<com.aura.resolver.IndexedEntity> = if (contactsGranted) {
-                            try { contactProvider.getContactEntities() } catch (_: Exception) { emptyList() }
-                        } else emptyList()
-                        apps to cts
-                    }
-                    val newIndex = L0IndexFactory.buildIndex(realApps, contacts = contacts)
-                    currentIndexState.value = newIndex
-                    routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
+                activityLifecycle.addObserver(obs)
+                onDispose {
+                    activityLifecycle.removeObserver(obs)
+                    widgetHost.stopListening()
                 }
+            }
+            // Prune orphaned host ids not in stored list (covers uninstalls)
+            LaunchedEffect(homeSettings.widgetIds) {
+                widgetHost.deleteOrphaned(homeSettings.widgetIds)
+            }
 
-                // Single explicit-execution path: proposal -> L3 validation -> ValidatedAction -> executor.
-                // Called ONLY from explicit user events (Act tap, ACTION chip, Enter on pre-selected Act).
-                fun executeValidated(result: ResolvedResult) {
-                    scope.launch {
-                        when (val validation = L3Validator(currentIndexState.value).validate(result)) {
-                            is com.aura.resolver.l3.L3ValidationResult.Validated -> {
-                                when (val exec = executor.execute(validation.action)) {
-                                    is ExecutionResult.Success -> {
-                                        // Execution itself is the success interaction for app-launching
-                                        // actions; Copy/Timer keep their existing inline confirmation.
-                                    }
-                                    is ExecutionResult.Failure ->
-                                        commandState = CommandState.Error(CommandError(exec.message))
-                                    is ExecutionResult.Unavailable ->
-                                        commandState = CommandState.Empty(query)
-                                }
-                            }
-                            is com.aura.resolver.l3.L3ValidationResult.Invalid ->
-                                commandState = CommandState.Error(CommandError(validation.message))
-                            is com.aura.resolver.l3.L3ValidationResult.Unavailable ->
-                                commandState = CommandState.Empty(query)
-                        }
-                    }
-                }
+            // Pending widget allocate/bind/configure state
+            var pendingWidgetId by remember { mutableStateOf<Int?>(null) }
+            var pendingWidgetProvider by remember { mutableStateOf<android.content.ComponentName?>(null) }
 
-                // Real routing — re-evaluates when query or router (after real index load) changes.
-                // Also implements the one-time contextual contacts ask on the first comms query.
-                LaunchedEffect(query, routerState.value) {
-                    if (!contactsGranted && !contactsAskedOnce &&
-                        Regex("^(call|dial|phone|ring|message|text|chat|tell|whatsapp|email|mail|send)\\b", RegexOption.IGNORE_CASE)
-                            .containsMatchIn(query.trim())
-                    ) {
-                        contactsAskedOnce = true
-                        contactsPermissionLauncher.launch(AndroidContactIndexProvider.CONTACTS_PERMISSION)
-                    }
-                    if (query == "resolving") {
-                        isResolving = true
-                        commandState = CommandState.Idle
-                        return@LaunchedEffect
-                    }
-                    isResolving = false
-                    commandState = when {
-                        query.isBlank() -> CommandState.Idle
-                        // Keep explicit error demo for preview — L0 itself never returns Error for no-match
-                        query.equals("error", ignoreCase = true) -> CommandState.Error(PreviewData.errorExample)
-                        else -> routerState.value.routeToCommandState(query)
-                    }
-                }
-
-                // ---- Launcher role (PRD \u00a716): detect, offer once per process, never nag after grant/dismissal
-                // Android owns the decision; AURA only asks via LauncherRoleHelper.
-                var isDefault by remember { mutableStateOf(com.aura.platform.android.LauncherRoleHelper.isDefaultHome(context)) }
-                var roleBannerDismissed by remember { mutableStateOf(false) }
-
-                val roleLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.StartActivityForResult()
-                ) { isDefault = com.aura.platform.android.LauncherRoleHelper.isDefaultHome(context) }
-
-                fun requestDefaultHome() {
-                    val intent = com.aura.platform.android.LauncherRoleHelper.createRequestIntent(context)
-                        ?: com.aura.platform.android.LauncherRoleHelper.homeSettingsIntent()
-                    roleLauncher.launch(intent)
-                }
-
-                // ---- App Library + package-change refresh (event-driven, no polling)
-                var showLibrary by remember { mutableStateOf(false) }
-                var showNotifications by remember { mutableStateOf(false) }
-                val notifAccess = remember(context) { AndroidNotificationAccessManager(context.applicationContext) }
-                var notifGranted by remember { mutableStateOf(notifAccess.isAccessGranted()) }
-                val notificationItems by NotificationRepository.items.collectAsState()
-
-                DisposableEffect(context) {
-                    val monitor = PackageChangeMonitor(context.applicationContext) {
-                        scope.launch {
-                            val apps = withContext(Dispatchers.IO) {
-                                try { AndroidAppIndexProvider(context.applicationContext).getAppEntities() } catch (_: Exception) { emptyList<com.aura.resolver.IndexedEntity>() }
-                            }
-                            val contacts = if (contactsGranted) withContext(Dispatchers.IO) {
-                                try { contactProvider.getContactEntities() } catch (_: Exception) { emptyList<com.aura.resolver.IndexedEntity>() }
-                            } else emptyList()
-                            val newIndex = L0IndexFactory.buildIndex(apps, contacts = contacts)
-                            currentIndexState.value = newIndex
-                            routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
-                        }
-                    }
-                    monitor.register()
-                    onDispose { monitor.unregister() }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(AuraTheme.colors.surfaceBase)
-                ) {
-                    if (showNotifications) {
-                        // Re-check on each open — user may have toggled access in Settings.
-                        notifGranted = notifAccess.isAccessGranted()
-                        if (notifGranted) {
-                            // Mark visible keys as seen: only now has the user actually viewed them.
-                            LaunchedEffect(Unit) {
-                                NotificationRepository.markShown(notificationItems.map { it.key })
-                            }
-                        }
-                        NotificationPanelScreen(
-                            items = notificationItems,
-                            accessGranted = notifGranted,
-                            onRequestAccess = { notifAccess.launchSettings() },
-                            onOpenNotification = { item ->
-                                // Platform boundary executes the notification's own PendingIntent;
-                                // failure stays inside AURA with existing Error semantics.
-                                if (!NotificationRepository.open(item.key)) {
-                                    commandState = CommandState.Error(CommandError("Cannot open notification"))
-                                    showNotifications = false
-                                }
-                            },
-                            onDismissNotification = { item ->
-                                NotificationRepository.cancel(item.key)
-                            },
-                            onClose = { showNotifications = false }
-                        )
-                    } else if (showLibrary) {
-                        AppLibraryScreen(
-                            apps = currentIndexState.value.allEntities(),
-                            onLaunch = { result ->
-                                showLibrary = false
-                                executeValidated(result) // same L3+executor path as Command Bar
-                            },
-                            onClose = { showLibrary = false }
-                        )
+            val widgetConfigureLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                val id = pendingWidgetId
+                pendingWidgetId = null
+                pendingWidgetProvider = null
+                if (id != null && id != android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    if (result.resultCode == RESULT_OK) {
+                        val next = homeSettings.widgetIds + id
+                        auraPrefs.setWidgetIds(next)
                     } else {
-                    HomeScreen(
-                        commandState = commandState,
-                        isResolving = isResolving,
-                        query = query,
-                        focused = focused,
-                        onQueryChange = { query = it },
-                        onFocusedChange = { focused = it },
-                        presenceText = when {
-                            query.isNotBlank() -> null
-                            else -> "Good morning" // deterministic Presence, silence valid when typing
-                        },
-                        onActExecute = { result ->
-                            // Explicit user activation only — never on typing
-                            // NO VALIDATED ACTION → NO EXECUTION
-                            executeValidated(result)
-                        },
-                        onCandidateSelect = { candidate ->
-                            // Collapse ASK → ACT (that transition IS confirmation, DL §15)
-                            // For app candidates (Did you mean), directly show and execute the chosen app
-                            val isApp = candidate.id.startsWith("app:")
-                            val isSettings = candidate.id.startsWith("settings:")
-                            val result = when {
-                                isApp -> {
-                                    val pkg = candidate.id.removePrefix("app:")
-                                    ResolvedResult(
-                                        id = candidate.id,
-                                        title = candidate.title,
-                                        subtitle = candidate.disambiguation,
-                                        type = ResultType.App,
-                                        action = AuraAction.OpenApp(pkg)
-                                    )
-                                }
-                                isSettings -> {
-                                    val key = candidate.id.removePrefix("settings:")
-                                    ResolvedResult(
-                                        id = candidate.id,
-                                        title = candidate.title,
-                                        subtitle = candidate.disambiguation,
-                                        type = ResultType.Settings,
-                                        action = AuraAction.OpenSettings(key)
-                                    )
-                                }
-                                else -> ResolvedResult(
-                                    id = candidate.id,
-                                    title = candidate.title,
-                                    subtitle = candidate.disambiguation,
-                                    type = ResultType.Contact,
-                                    action = AuraAction.NoOp
-                                )
+                        widgetHost.deleteId(id)
+                    }
+                }
+            }
+
+            val widgetBindLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                val id = pendingWidgetId
+                val provider = pendingWidgetProvider
+                if (id != null && provider != null && result.resultCode == RESULT_OK) {
+                    // Bound — now maybe configure
+                    val info = installedWidgetProviders.firstOrNull { it.provider == provider }
+                        ?: widgetHost.providerForId(id)?.let { widgetHost.providerForId(id) } // fallback lookup
+                    // Re-query info via manager
+                    val resolved = try { widgetHost.providerForId(id) } catch (_: Exception) { null }
+                    val cfg = resolved?.let { widgetHost.configureIntent(it, id) }
+                    if (cfg != null) {
+                        widgetConfigureLauncher.launch(cfg)
+                    } else {
+                        auraPrefs.setWidgetIds(homeSettings.widgetIds + id)
+                        pendingWidgetId = null
+                        pendingWidgetProvider = null
+                    }
+                } else if (id != null) {
+                    if (id != android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID) widgetHost.deleteId(id)
+                    pendingWidgetId = null
+                    pendingWidgetProvider = null
+                }
+            }
+
+            fun addWidgetFlow(provider: android.appwidget.AppWidgetProviderInfo) {
+                val id = widgetHost.allocateId()
+                if (id == android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID) return
+                val bound = widgetHost.bindIfAllowed(id, provider.provider)
+                if (!bound) {
+                    pendingWidgetId = id
+                    pendingWidgetProvider = provider.provider
+                    val bindIntent = widgetHost.bindPermissionIntent(id, provider.provider)
+                    try { widgetBindLauncher.launch(bindIntent) } catch (_: Exception) {
+                        widgetHost.deleteId(id); pendingWidgetId = null; pendingWidgetProvider = null
+                    }
+                    return
+                }
+                val cfg = widgetHost.configureIntent(provider, id)
+                if (cfg != null) {
+                    pendingWidgetId = id
+                    pendingWidgetProvider = provider.provider
+                    try { widgetConfigureLauncher.launch(cfg) } catch (_: Exception) {
+                        auraPrefs.setWidgetIds(homeSettings.widgetIds + id)
+                        pendingWidgetId = null; pendingWidgetProvider = null
+                    }
+                } else {
+                    auraPrefs.setWidgetIds(homeSettings.widgetIds + id)
+                }
+            }
+
+            // ---- Battery ----
+            val batteryMonitor = remember(context) { BatteryMonitor(context.applicationContext) }
+            val batteryState by batteryMonitor.state.collectAsState()
+            DisposableEffect(batteryMonitor) {
+                batteryMonitor.start()
+                onDispose { batteryMonitor.stop() }
+            }
+
+            // ---- Music ----
+            val musicMonitor = remember(context) { MusicMonitor(context.applicationContext) }
+            val musicPlaying by musicMonitor.playing.collectAsState()
+            DisposableEffect(activityLifecycle) {
+                val obs = LifecycleEventObserver { _, e ->
+                    if (e == Lifecycle.Event.ON_RESUME) musicMonitor.refresh()
+                }
+                activityLifecycle.addObserver(obs)
+                musicMonitor.refresh()
+                onDispose { activityLifecycle.removeObserver(obs) }
+            }
+
+            // ---- Calendar / Next Event ----
+            val nextEventProvider = remember(context) { NextEventProvider(context.applicationContext) }
+            var nextEvent by remember { mutableStateOf<NextEventInfo?>(null) }
+            var calendarGranted by remember { mutableStateOf(nextEventProvider.hasPermission()) }
+            var calendarAskedOnce by remember { mutableStateOf(false) }
+            val nextEventVersion by nextEventProvider.version.collectAsState()
+            DisposableEffect(nextEventProvider) {
+                if (HomeModuleType.NextEvent in homeSettings.modules) nextEventProvider.startObserving()
+                onDispose { nextEventProvider.stopObserving() }
+            }
+            // Reflect enable/disable of Next Event observing
+            LaunchedEffect(homeSettings.modules) {
+                if (HomeModuleType.NextEvent in homeSettings.modules) nextEventProvider.startObserving()
+                else nextEventProvider.stopObserving()
+                calendarGranted = nextEventProvider.hasPermission()
+            }
+            val calendarPermissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                calendarGranted = granted
+                calendarAskedOnce = true
+            }
+            // Auto-ask once when Next Event becomes enabled and permission not granted
+            LaunchedEffect(homeSettings.modules, calendarGranted, calendarAskedOnce) {
+                if (HomeModuleType.NextEvent in homeSettings.modules && !calendarGranted && !calendarAskedOnce) {
+                    calendarAskedOnce = true
+                    calendarPermissionLauncher.launch(NextEventProvider.PERMISSION)
+                }
+            }
+            // Query next event when version/permission changes (IO thread)
+            LaunchedEffect(nextEventVersion, calendarGranted, homeSettings.modules) {
+                if (HomeModuleType.NextEvent !in homeSettings.modules || !calendarGranted) {
+                    nextEvent = null
+                    return@LaunchedEffect
+                }
+                val ev = withContext(Dispatchers.IO) { nextEventProvider.queryNextEvent() }
+                nextEvent = ev
+            }
+
+            // ---- Wallpaper picker ----
+            val wallpaperLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { }
+            fun launchWallpaperPicker() {
+                val intent = WallpaperPicker.intent(context) ?: return
+                try { wallpaperLauncher.launch(intent) } catch (_: Exception) {}
+            }
+
+            fun hasContactsPermission(): Boolean = contactProvider.hasContactsPermission()
+            var contactsGranted by remember { mutableStateOf(hasContactsPermission()) }
+            var contactsAskedOnce by remember { mutableStateOf(false) }
+            val currentIndexState = remember { mutableStateOf(L0IndexFactory.buildIndex(emptyList(), contacts = emptyList())) }
+            val routerState = remember {
+                val idx = currentIndexState.value
+                mutableStateOf(IntentRouter(L0Resolver(idx), L1Resolver(idx), L2Resolver(idx), L3Validator(idx)))
+            }
+
+            val contactsPermissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                contactsGranted = granted
+                if (granted) {
+                    scope.launch {
+                        val contacts = withContext(Dispatchers.IO) {
+                            try { contactProvider.getContactEntities() } catch (_: Exception) { emptyList() }
+                        }
+                        val newIndex = L0IndexFactory.buildIndex(
+                            withContext(Dispatchers.IO) {
+                                try { AndroidAppIndexProvider(context.applicationContext).getAppEntities() } catch (_: Exception) { emptyList() }
+                            },
+                            contacts = contacts
+                        )
+                        currentIndexState.value = newIndex
+                        routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
+                    }
+                }
+            }
+
+            LaunchedEffect(contactsGranted) {
+                val (realApps, contacts) = withContext(Dispatchers.IO) {
+                    val apps: List<com.aura.resolver.IndexedEntity> = try {
+                        AndroidAppIndexProvider(context.applicationContext).getAppEntities()
+                    } catch (_: Exception) { emptyList() }
+                    val cts: List<com.aura.resolver.IndexedEntity> = if (contactsGranted) {
+                        try { contactProvider.getContactEntities() } catch (_: Exception) { emptyList() }
+                    } else emptyList()
+                    apps to cts
+                }
+                val newIndex = L0IndexFactory.buildIndex(realApps, contacts = contacts)
+                currentIndexState.value = newIndex
+                routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
+            }
+
+            var query by remember { mutableStateOf("") }
+            var commandState: CommandState by remember { mutableStateOf(CommandState.Idle) }
+            var focused by remember { mutableStateOf(false) }
+            var isResolving by remember { mutableStateOf(false) }
+
+            fun executeValidated(result: ResolvedResult) {
+                scope.launch {
+                    when (val validation = L3Validator(currentIndexState.value).validate(result)) {
+                        is com.aura.resolver.l3.L3ValidationResult.Validated -> {
+                            when (val exec = executor.execute(validation.action)) {
+                                is ExecutionResult.Success -> {}
+                                is ExecutionResult.Failure ->
+                                    commandState = CommandState.Error(CommandError(exec.message))
+                                is ExecutionResult.Unavailable ->
+                                    commandState = CommandState.Empty(query)
                             }
-                            commandState = CommandState.Act(result)
-                            // For apps/settings, execute immediately on selection (one-tap open)
-                            if (isApp || isSettings) {
-                                scope.launch {
-                                    val validation = L3Validator(currentIndexState.value).validate(result)
-                                    if (validation is com.aura.resolver.l3.L3ValidationResult.Validated) {
-                                        when (val exec = executor.execute(validation.action)) {
-                                            is ExecutionResult.Failure -> commandState = CommandState.Error(CommandError(exec.message))
-                                            is ExecutionResult.Unavailable -> commandState = CommandState.Empty(query)
-                                            else -> {}
+                        }
+                        is com.aura.resolver.l3.L3ValidationResult.Invalid ->
+                            commandState = CommandState.Error(CommandError(validation.message))
+                        is com.aura.resolver.l3.L3ValidationResult.Unavailable ->
+                            commandState = CommandState.Empty(query)
+                    }
+                }
+            }
+
+            LaunchedEffect(query, routerState.value) {
+                if (!contactsGranted && !contactsAskedOnce &&
+                    Regex("^(call|dial|phone|ring|message|text|chat|tell|whatsapp|email|mail|send)\\b", RegexOption.IGNORE_CASE)
+                        .containsMatchIn(query.trim())
+                ) {
+                    contactsAskedOnce = true
+                    contactsPermissionLauncher.launch(AndroidContactIndexProvider.CONTACTS_PERMISSION)
+                }
+                if (query == "resolving") {
+                    isResolving = true
+                    commandState = CommandState.Idle
+                    return@LaunchedEffect
+                }
+                isResolving = false
+                commandState = when {
+                    query.isBlank() -> CommandState.Idle
+                    query.equals("error", ignoreCase = true) -> CommandState.Error(PreviewData.errorExample)
+                    else -> routerState.value.routeToCommandState(query)
+                }
+            }
+
+            var isDefault by remember { mutableStateOf(com.aura.platform.android.LauncherRoleHelper.isDefaultHome(context)) }
+            var roleBannerDismissed by remember { mutableStateOf(false) }
+            val roleLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { isDefault = com.aura.platform.android.LauncherRoleHelper.isDefaultHome(context) }
+            fun requestDefaultHome() {
+                val intent = com.aura.platform.android.LauncherRoleHelper.createRequestIntent(context)
+                    ?: com.aura.platform.android.LauncherRoleHelper.homeSettingsIntent()
+                roleLauncher.launch(intent)
+            }
+
+            var showLibrary by remember { mutableStateOf(false) }
+            var editSurface: EditSurface by remember { mutableStateOf(EditSurface.Closed) }
+
+            // Prune dock_WIDGET ids on package/uninstall events: handled in monitor callback + host prune above
+            DisposableEffect(context) {
+                val monitor = PackageChangeMonitor(context.applicationContext) {
+                    scope.launch {
+                        val apps = withContext(Dispatchers.IO) {
+                            try { AndroidAppIndexProvider(context.applicationContext).getAppEntities() } catch (_: Exception) { emptyList<com.aura.resolver.IndexedEntity>() }
+                        }
+                        val contacts = if (contactsGranted) withContext(Dispatchers.IO) {
+                            try { contactProvider.getContactEntities() } catch (_: Exception) { emptyList<com.aura.resolver.IndexedEntity>() }
+                        } else emptyList()
+                        val newIndex = L0IndexFactory.buildIndex(apps, contacts = contacts)
+                        currentIndexState.value = newIndex
+                        routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
+                        // Prune dock entries whose app was uninstalled
+                        val installed = apps.map { it.id.removePrefix("app:") }.toSet()
+                        val prunedDock = DockLogic.prune(auraPrefs.settings.value.dock, installed)
+                        if (prunedDock != auraPrefs.settings.value.dock) auraPrefs.setDock(prunedDock)
+                        // Prune stale widget ids (provider no longer available)
+                        val liveIds = widgetHost.hostIds()
+                        val stored = auraPrefs.settings.value.widgetIds
+                        val prunedWidgets = stored.filter { it in liveIds && widgetHost.providerForId(it) != null }
+                        if (prunedWidgets != stored) auraPrefs.setWidgetIds(prunedWidgets)
+                    }
+                }
+                monitor.register()
+                onDispose { monitor.unregister() }
+            }
+
+            // Derive widget id -> label map for edit sheet rows
+            val widgetIdLabels: Map<Int, String> = remember(homeSettings.widgetIds, installedWidgetProviders) {
+                val byId = mutableMapOf<Int, String>()
+                homeSettings.widgetIds.forEach { id ->
+                    val info = try { widgetHost.providerForId(id) } catch (_: Exception) { null }
+                    val label = info?.let {
+                        try { it.loadLabel(packageManager) } catch (_: Exception) { it.provider.packageName }
+                    } ?: "Widget #$id"
+                    byId[id] = label
+                }
+                byId
+            }
+
+            // Use custom accent color validated at render time via AuraTheme resolver
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalReducedMotion provides reducedMotion
+            ) {
+                AuraTheme(darkTheme = isDarkTheme, accentOverride = accentOverride) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(AuraTheme.colors.surfaceBase)
+                    ) {
+                        HomeScreen(
+                            commandState = commandState,
+                            isResolving = isResolving,
+                            query = query,
+                            focused = focused,
+                            onQueryChange = { query = it },
+                            onFocusedChange = { focused = it },
+                            onActExecute = { result -> executeValidated(result) },
+                            onCandidateSelect = { candidate ->
+                                val isApp = candidate.id.startsWith("app:")
+                                val isSettings = candidate.id.startsWith("settings:")
+                                val result = when {
+                                    isApp -> {
+                                        val pkg = candidate.id.removePrefix("app:")
+                                        ResolvedResult(
+                                            id = candidate.id, title = candidate.title, subtitle = candidate.disambiguation,
+                                            type = ResultType.App, action = AuraAction.OpenApp(pkg)
+                                        )
+                                    }
+                                    isSettings -> {
+                                        val key = candidate.id.removePrefix("settings:")
+                                        ResolvedResult(
+                                            id = candidate.id, title = candidate.title, subtitle = candidate.disambiguation,
+                                            type = ResultType.Settings, action = AuraAction.OpenSettings(key)
+                                        )
+                                    }
+                                    else -> ResolvedResult(
+                                        id = candidate.id, title = candidate.title, subtitle = candidate.disambiguation,
+                                        type = ResultType.Contact, action = AuraAction.NoOp
+                                    )
+                                }
+                                commandState = CommandState.Act(result)
+                                if (isApp || isSettings) {
+                                    scope.launch {
+                                        val validation = L3Validator(currentIndexState.value).validate(result)
+                                        if (validation is com.aura.resolver.l3.L3ValidationResult.Validated) {
+                                            when (val exec = executor.execute(validation.action)) {
+                                                is ExecutionResult.Failure -> commandState = CommandState.Error(CommandError(exec.message))
+                                                is ExecutionResult.Unavailable -> commandState = CommandState.Empty(query)
+                                                else -> {}
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        },
-                        onActionChipClick = { chip ->
-                            // Explicit execution event: chip maps to a sibling action of the same
-                            // validated parent; still passes through L3 before executing.
-                            val current = commandState
-                            if (current is CommandState.Act) {
-                                ActionChipMapper.map(current.result, chip)?.let { mapped ->
-                                    commandState = CommandState.Act(mapped)
-                                    executeValidated(mapped)
+                            },
+                            onActionChipClick = { chip ->
+                                val current = commandState
+                                if (current is CommandState.Act) {
+                                    ActionChipMapper.map(current.result, chip)?.let { mapped ->
+                                        commandState = CommandState.Act(mapped)
+                                        executeValidated(mapped)
+                                    }
                                 }
-                            }
-                        },
-                        onCopy = { text ->
-                            scope.launch {
-                                val copyResult = ResolvedResult(
-                                    id = "copy:${text.hashCode()}",
-                                    title = text,
-                                    type = ResultType.Math,
-                                    action = AuraAction.Copy(text)
-                                )
-                                val validation = L3Validator(currentIndexState.value).validate(copyResult)
-                                if (validation is com.aura.resolver.l3.L3ValidationResult.Validated) {
-                                    executor.execute(validation.action)
+                            },
+                            onCopy = { text ->
+                                scope.launch {
+                                    val copyResult = ResolvedResult(
+                                        id = "copy:${text.hashCode()}", title = text, type = ResultType.Math,
+                                        action = AuraAction.Copy(text)
+                                    )
+                                    val validation = L3Validator(currentIndexState.value).validate(copyResult)
+                                    if (validation is com.aura.resolver.l3.L3ValidationResult.Validated) executor.execute(validation.action)
                                 }
-                            }
-                        },
-                        onUndo = {
-                            // Dismisses the inline confirmation — returns to idle (DL §15).
-                            // Never claims system-timer cancellation AURA cannot perform.
-                            commandState = CommandState.Idle
-                            query = ""
-                        },
-                        onSubmit = {
-                            // Design Direction: top result is pre-selected — Enter executes it.
-                            // Only an existing ACT may execute; typing alone never does.
-                            val current = commandState
-                            if (current is CommandState.Act) {
-                                executeValidated(current.result)
-                            }
-                        },
-                        onOpenNotifications = { showNotifications = true },
-                        showDefaultHomeBanner = !isDefault && !roleBannerDismissed,
-                        onSetAsDefault = { requestDefaultHome() },
-                        onDismissRoleBanner = { roleBannerDismissed = true },
-                        onOpenLibrary = { showLibrary = true }
-                    )
+                            },
+                            onUndo = { commandState = CommandState.Idle; query = "" },
+                            onSubmit = {
+                                val current = commandState
+                                if (current is CommandState.Act) executeValidated(current.result)
+                            },
+                            showDefaultHomeBanner = !isDefault && !roleBannerDismissed,
+                            onSetAsDefault = { requestDefaultHome() },
+                            onDismissRoleBanner = { roleBannerDismissed = true },
+                            onOpenLibrary = { showLibrary = true },
+                            dock = homeSettings.dock,
+                            appIndex = currentIndexState.value.allEntities(),
+                            onDockLaunch = { pkg ->
+                                val fake = ResolvedResult(id = "app:$pkg", title = pkg, type = ResultType.App, action = AuraAction.OpenApp(pkg))
+                                executeValidated(fake)
+                            },
+                            modules = homeSettings.modules,
+                            nextEvent = nextEvent,
+                            nextEventPermissionDenied = HomeModuleType.NextEvent in homeSettings.modules && !calendarGranted,
+                            onRequestNextEventPermission = {
+                                if (!calendarGranted) calendarPermissionLauncher.launch(NextEventProvider.PERMISSION)
+                            },
+                            battery = batteryState,
+                            musicPlaying = musicPlaying,
+                            onMusicPlayPause = { musicMonitor.playPause(); scope.launch { kotlinx.coroutines.delay(350); musicMonitor.refresh() } },
+                            onMusicNext = { musicMonitor.next(); scope.launch { kotlinx.coroutines.delay(350); musicMonitor.refresh() } },
+                            onMusicPrev = { musicMonitor.prev(); scope.launch { kotlinx.coroutines.delay(350); musicMonitor.refresh() } },
+                            widgetIds = homeSettings.widgetIds,
+                            widgetContent = { wid ->
+                                val providerInfo = remember(wid) {
+                                    try { widgetHost.providerForId(wid) } catch (_: Exception) { null }
+                                }
+                                if (providerInfo == null) {
+                                    Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                                        Text("Widget unavailable", style = AuraTheme.typography.caption, color = AuraTheme.colors.textSecondary)
+                                    }
+                                } else {
+                                    val density = LocalContext.current.resources.displayMetrics.density
+                                    var hostViewRef by remember { mutableStateOf<android.appwidget.AppWidgetHostView?>(null) }
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            val v = widgetHost.createView(wid, providerInfo)
+                                            hostViewRef = v
+                                            v ?: android.view.View(ctx)
+                                        },
+                                        update = { view ->
+                                            if (view is android.appwidget.AppWidgetHostView) {
+                                                val w = (view.width / density).toInt().coerceAtLeast(120)
+                                                val h = (view.height / density).toInt().coerceAtLeast(96)
+                                                if (w > 0 && h > 0) widgetHost.updateSize(view, w, h)
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)
+                                            .wrapContentHeight()
+                                    )
+                                }
+                            },
+                            wallpaperEnabled = homeSettings.customization.showWallpaper,
+                            onOpenEdit = { editSurface = EditSurface.Main }
+                        )
+
+                        if (showLibrary) {
+                            AppLibraryScreen(
+                                apps = currentIndexState.value.allEntities(),
+                                onLaunch = { result -> showLibrary = false; executeValidated(result) },
+                                onClose = { showLibrary = false }
+                            )
+                        }
+
+                        if (editSurface !is EditSurface.Closed) {
+                            HomeEditOverlay(
+                                surface = editSurface,
+                                settings = homeSettings,
+                                onSettingsChange = { auraPrefs.setSettings(it) },
+                                appIndex = currentIndexState.value.allEntities(),
+                                widgetLabels = widgetIdLabels,
+                                installedWidgetProviders = installedWidgetProviders,
+                                onAddWidget = { info -> addWidgetFlow(info) },
+                                onChooseWallpaper = { launchWallpaperPicker() },
+                                onClose = { editSurface = EditSurface.Closed },
+                                onOpenDockPicker = { editSurface = EditSurface.DockPicker },
+                                onOpenWidgetPicker = { editSurface = EditSurface.WidgetPicker },
+                                onBackToMain = { editSurface = EditSurface.Main }
+                            )
+                        }
                     }
                 }
             }

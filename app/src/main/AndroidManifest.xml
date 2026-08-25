@@ -4,6 +4,8 @@
     <!-- READ_CONTACTS: requested contextually, only when the user first attempts a
          contact-dependent action (PRD §9.8). App works fully without it. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- READ_CALENDAR: requested contextually when enabling the Next Event module. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <!-- Package visibility for launcher discovery (API 30+) — minimal, only MAIN/LAUNCHER -->
     <queries>
@@ -35,17 +37,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
-
-        <!-- Notification ingestion boundary (PRD §9.4). Event-driven; system binds with
-             the listener permission. Not exported — only the system can bind. -->
-        <service
-            android:name=".platform.android.AuraNotificationListenerService"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
     </application>
 
 </manifest>
