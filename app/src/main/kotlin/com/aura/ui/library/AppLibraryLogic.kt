@@ -3,6 +3,8 @@ package com.aura.ui.library
 import com.aura.domain.ResultType
 import com.aura.resolver.EntityCategory
 import com.aura.resolver.IndexedEntity
+import com.aura.resolver.Normalizer
+import java.util.Locale
 
 /**
  * Pure App Library logic — no Compose, no Android APIs. Fully unit-testable.
@@ -12,24 +14,26 @@ object AppLibraryLogic {
 
     data class Section(val letter: String, val startIndex: Int)
 
-    /** Launchable apps only, deterministic alphabetical order (label, then package id tiebreak). */
+    /** Launchable apps only, deterministic alphabetical order (normalized label, then package id tiebreak).
+     *  Uses Normalizer parity with L0 so " Chrome " and "CHROME" sort identically. */
     fun appsFromIndex(entities: List<IndexedEntity>): List<IndexedEntity> =
         entities
             .filter { it.category == EntityCategory.App && it.resultType == ResultType.App }
             .sortedWith(
                 compareBy(
-                    { it.displayLabel.lowercase() },
                     { it.normalizedLabel },
                     { it.id } // stable package identifier tiebreak for duplicate labels
                 )
             )
 
-    /** Live search over the already-loaded list — no platform enumeration per keystroke. */
+    /** Live search over the already-loaded list — no platform enumeration per keystroke.
+     *  Uses Normalizer parity with L0 (NFC, trim, whitespace collapse, lowercase ROOT)
+     *  so Command Bar and App Library feel like the same engine. */
     fun filter(apps: List<IndexedEntity>, query: String): List<IndexedEntity> {
-        val q = query.trim().lowercase()
+        val q = Normalizer.normalize(query)
         if (q.isEmpty()) return apps
         return apps.filter {
-            it.normalizedLabel.contains(q) || it.id.removePrefix("app:").lowercase().contains(q)
+            it.normalizedLabel.contains(q) || it.id.removePrefix("app:").lowercase(Locale.ROOT).contains(q)
         }
     }
 

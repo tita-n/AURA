@@ -88,9 +88,12 @@ Goal: make AURA genuinely pleasant to live with every day. Not smarter — more 
   Wallpaper (system picker entry), Animation (Standard/Reduced). Explicitly excluded:
   arbitrary fonts, icon marketplaces, free grids, custom animation editors,
   unrestricted color pickers, theme marketplaces.
-- **Persistence**: SharedPreferences-backed key/value store. Room deliberately NOT
+- **Persistence**: SharedPreferences-backed key/value store (`aura_home.xml`). Room deliberately NOT
   introduced — the layout model is a small ordered list plus scalar settings;
   SharedPreferences covers it exactly. Rationale documented in code.
+- **Backup**: `allowBackup` remains true, but `aura_home.xml` is explicitly excluded
+  via `fullBackupContent` (API 23+) and `dataExtractionRules` (API 31+). AURA Home
+  customization is currently device-local. Backup/sync is not yet part of the product.
 
 ### Later candidates (not committed)
 

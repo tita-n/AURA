@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -201,15 +204,30 @@ fun HomeScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            // Library affordance — tap/swipe up for App Library; long-press to edit elsewhere
+            // Library affordance — dedicated 48dp tappable entry (Button semantics) + swipe-up.
+            // Not inside the middle long-press region so OEM gesture overlays cannot swallow it.
+            // Restrained: caption glyph + label, no giant bar, tokens only.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 40.dp)
-                    .clickable(role = Role.Button, onClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onOpenLibrary()
-                    }),
+                    .heightIn(min = 48.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(AuraTheme.radius.small))
+                    .auraFocusRing(androidx.compose.foundation.shape.RoundedCornerShape(AuraTheme.radius.small))
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { _, dragAmount ->
+                            if (dragAmount < -24f) onOpenLibrary()
+                        }
+                    }
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = "Open app library",
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onOpenLibrary()
+                        }
+                    )
+                    .semantics { contentDescription = "Open app library" }
+                    .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text("⌃  Apps", style = typography.caption, color = colors.textSecondary.copy(alpha = 0.6f))

@@ -97,6 +97,11 @@ class AuraWidgetHost(private val context: Context) {
     /**
      * Report actual view size to the widget so responsive widgets pick the right layout.
      * Call after the host view has measured.
+     *
+     * Resize support: Android 12+ (API 31) introduces OPTION_APPWIDGET_SIZES (List<SizeF>)
+     * for responsive widgets. We provide both the legacy MIN/MAX and the new SIZES list
+     * for backward compatibility. No custom resize overlay yet — widgets are responsive
+     * via the sizes we report (honest status per PRODUCT.md).
      */
     fun updateSize(hostView: android.appwidget.AppWidgetHostView, widthDp: Int, heightDp: Int) {
         try {
@@ -105,7 +110,21 @@ class AuraWidgetHost(private val context: Context) {
                 putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, widthDp)
                 putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, heightDp)
                 putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, heightDp)
+                if (android.os.Build.VERSION.SDK_INT >= 31) {
+                    // Provide SIZES for API 31+ responsive widgets; keep MIN/MAX for <31 fallback.
+                    try {
+                        val sizeF = android.util.SizeF(widthDp.toFloat(), heightDp.toFloat())
+                        putParcelableArrayList(
+                            AppWidgetManager.OPTION_APPWIDGET_SIZES,
+                            arrayListOf(sizeF)
+                        )
+                    } catch (_: Exception) {}
+                }
             }
+            // Deprecated 4-int overload is still required for API <31; on 31+ the Bundle's
+            // SIZES is preferred but the deprecated call still dispatches correctly. We
+            // suppress deprecation to keep a single code path that works on minSdk 26.
+            @Suppress("DEPRECATION")
             hostView.updateAppWidgetSize(opts, widthDp, widthDp, heightDp, heightDp)
         } catch (_: Exception) {}
     }

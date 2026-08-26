@@ -14,6 +14,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
@@ -114,7 +117,9 @@ fun AppLibraryScreen(
                                     letter,
                                     style = typography.label,
                                     color = colors.textSecondary,
-                                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                                    modifier = Modifier
+                                        .padding(top = 16.dp, bottom = 4.dp)
+                                        .semantics { heading() }
                                 )
                             }
                             lastLetter = letter
@@ -141,22 +146,28 @@ fun AppLibraryScreen(
                 }
             }
 
-            // Fast-scroll rail — RTL-aware (CenterEnd mirrors), ≥48dp targets
+            // Fast-scroll rail — RTL-aware (CenterEnd mirrors), 48dp targets, keyboard accessible
             if (!rail.isNullOrEmpty() && filtered.size >= 8) {
                 Column(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .fillMaxHeight()
-                        .widthIn(min = 48.dp),
+                        .widthIn(min = 48.dp)
+                        .semantics { contentDescription = "Alphabetical index" },
                     verticalArrangement = Arrangement.Center
                 ) {
                     rail.forEach { section ->
+                        val isHash = section.letter == "#"
                         Box(
                             modifier = Modifier
-                                .size(width = 48.dp, height = 36.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
-                                .clickable(role = Role.Button) { pendingScrollLetter = section.letter }
-                                .auraFocusRing(),
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = if (isHash) "Jump to symbols" else "Jump to ${section.letter}"
+                                ) { pendingScrollLetter = section.letter }
+                                .auraFocusRing()
+                                .semantics { contentDescription = if (isHash) "Symbols" else section.letter },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(section.letter, style = typography.caption, color = colors.textSecondary)
@@ -170,7 +181,6 @@ fun AppLibraryScreen(
 
 @Composable
 private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
-    // Minimal inline filter field — visually a quiet raised line, not a second Command Bar.
     val colors = AuraTheme.colors
     androidx.compose.foundation.text.BasicTextField(
         value = query,
@@ -184,6 +194,7 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
                     .heightIn(min = AuraTheme.spacing.touchTargetMin)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(AuraTheme.radius.small))
                     .background(colors.surfaceRaised)
+                    .semantics { contentDescription = "Filter apps" }
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
@@ -193,7 +204,9 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
                 inner()
             }
         },
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = "Filter apps" }
     )
 }
 
@@ -210,8 +223,9 @@ private fun LibraryAppRow(app: IndexedEntity, onClick: () -> Unit) {
             .heightIn(min = AuraTheme.spacing.touchTargetMin)
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(AuraTheme.radius.small))
             .background(colors.surfaceRaised)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = "Open ${app.displayLabel}", onClick = onClick)
             .auraFocusRing()
+            .semantics(mergeDescendants = true) { contentDescription = app.displayLabel }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)

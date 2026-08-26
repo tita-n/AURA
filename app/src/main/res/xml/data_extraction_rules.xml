@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- AURA Home is device-local. See backup_rules.xml for full backup. -->
+        <exclude domain="sharedpref" path="aura_home.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="aura_home.xml" />
+    </device-transfer>
+</data-extraction-rules>
