@@ -8,14 +8,17 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -40,10 +43,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.aura.design.AuraTheme
 import com.aura.design.auraFocusRing
 import com.aura.domain.*
+import com.aura.home.BatteryContextualItem
 import com.aura.home.BatteryUiModel
+import com.aura.home.CalendarContextualItem
+import com.aura.home.ContextualEngine
+import com.aura.home.ContextualItem
 import com.aura.home.DockItem
 import com.aura.home.HomeModuleType
-import com.aura.home.ModuleRelevance
+import com.aura.home.MusicContextualItem
 import com.aura.home.MusicState
 import com.aura.home.NextEventInfo
 import com.aura.home.Presence
@@ -60,6 +67,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 /**
  * HomeScreen — shell per PRD 9.1 and Design Direction §4.2.
@@ -178,21 +186,31 @@ fun HomeScreen(
                 )
             }
 
-            // Contextual modules: enabled by the user, but only *visible* when relevant
-            // right now (event soon / low battery or charging / music playing). Home stays
-            // empty otherwise. Relevance is pure (ModuleRelevance) — see PRODUCT.md.
-            val moduleContext = remember(nowMillis, nextEvent, battery, musicPlaying) {
-                ModuleRelevance.ModuleContext(nowMillis, nextEvent, battery, musicPlaying)
+            // ONE contextual surface. Next Event / Battery / Music feed a single card that
+            // appears only when something is relevant and rotates when several are. Enabled
+            // sources are *allowed* to generate info; they do not permanently occupy Home.
+            // Relevance + priority are pure (ContextualEngine) — see PRODUCT.md.
+            val nextEventEnabled = HomeModuleType.NextEvent in modules
+            val batteryEnabled = HomeModuleType.Battery in modules
+            val musicEnabled = HomeModuleType.Music in modules
+            val contextualItems = remember(
+                nowMillis, nextEvent, nextEventPermissionDenied, nextEventEnabled,
+                battery, batteryEnabled, music, musicEnabled
+            ) {
+                ContextualEngine.build(
+                    nowMillis = nowMillis,
+                    nextEvent = nextEvent,
+                    nextEventDenied = nextEventPermissionDenied,
+                    nextEventEnabled = nextEventEnabled,
+                    battery = battery,
+                    batteryEnabled = batteryEnabled,
+                    musicState = music ?: MusicState.Hidden,
+                    musicEnabled = musicEnabled
+                )
             }
-            val visibleModules = modules.filter { ModuleRelevance.isRelevant(it, moduleContext) }
 
-            val moduleEnter: EnterTransition =
-                if (reducedMotion) EnterTransition.None else fadeIn(tween(160)) + slideInVertically { it / 10 }
-            val moduleExit: ExitTransition =
-                if (reducedMotion) ExitTransition.None else fadeOut(tween(160)) + slideOutVertically { it / 10 }
-
-            // Optional native modules — scrollable if present + widgets
-            val hasExtras = visibleModules.isNotEmpty() || widgetIds.isNotEmpty()
+            // Optional extras (contextual surface + widgets) — scrollable if present
+            val hasExtras = contextualItems.isNotEmpty() || widgetIds.isNotEmpty()
             if (hasExtras) {
                 Spacer(Modifier.height(16.dp))
                 val listModifier = Modifier
@@ -208,27 +226,16 @@ fun HomeScreen(
                     modifier = listModifier,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // Native modules in persisted order; each calmly enters/leaves by relevance.
-                    items(modules, key = { "mod:${it.name}" }) { mod ->
-                        AnimatedVisibility(
-                            visible = mod in visibleModules,
-                            enter = moduleEnter,
-                            exit = moduleExit
-                        ) {
-                            when (mod) {
-                                HomeModuleType.NextEvent -> NextEventRow(
-                                    event = nextEvent,
-                                    denied = nextEventPermissionDenied,
-                                    onRequestPermission = onRequestNextEventPermission
-                                )
-                                HomeModuleType.Battery -> BatteryRow(battery = battery)
-                                HomeModuleType.Music -> MusicRow(
-                                    music = music,
-                                    onPlayPause = onMusicPlayPause,
-                                    onNext = onMusicNext,
-                                    onPrev = onMusicPrev
-                                )
-                            }
+                    if (contextualItems.isNotEmpty()) {
+                        item(key = "ctx") {
+                            ContextualSurface(
+                                items = contextualItems,
+                                reducedMotion = reducedMotion,
+                                onMusicPlayPause = onMusicPlayPause,
+                                onMusicNext = onMusicNext,
+                                onMusicPrev = onMusicPrev,
+                                onRequestNextEventPermission = onRequestNextEventPermission
+                            )
                         }
                     }
                     // Widget slots (AndroidView per id, stable key)
@@ -499,6 +506,110 @@ private fun WidgetSlotCard(
             .padding(4.dp)
     ) {
         content(widgetId)
+    }
+}
+
+/**
+ * ONE contextual surface. Renders a single card for the current [ContextualItem].
+ * When multiple items are relevant it rotates between them (subtle, auto, stops when
+ * reduced motion or a single item) and shows pagination dots. Never three separate boxes.
+ */
+@Composable
+private fun ContextualSurface(
+    items: List<ContextualItem>,
+    reducedMotion: Boolean,
+    onMusicPlayPause: () -> Unit,
+    onMusicNext: () -> Unit,
+    onMusicPrev: () -> Unit,
+    onRequestNextEventPermission: () -> Unit
+) {
+    if (items.isEmpty()) return
+    var index by remember(items) { mutableStateOf(0) }
+    // Keep the index in range when the set of relevant items shrinks.
+    LaunchedEffect(items.size) { if (index >= items.size) index = 0 }
+
+    // Subtle auto-rotation ONLY while visible, multiple items, and motion allowed.
+    // The coroutine is cancelled when Home leaves foreground or the surface disappears,
+    // and the guard prevents it from running at all when only one item remains.
+    if (items.size > 1 && !reducedMotion) {
+        LaunchedEffect(items.size) {
+            while (true) {
+                delay(6000)
+                index = (index + 1) % items.size
+            }
+        }
+    }
+
+    val spec: AnimatedContentTransitionScope<Int>.() -> ContentTransform =
+        if (reducedMotion) {
+            { ContentTransform(EnterTransition.None, ExitTransition.None) }
+        } else {
+            {
+                slideInHorizontally { it / 4 } + fadeIn(tween(200)) togetherWith
+                    slideOutHorizontally { -it / 4 } + fadeOut(tween(200))
+            }
+        }
+
+    Column(Modifier.fillMaxWidth()) {
+        AnimatedContent(
+            targetState = index,
+            transitionSpec = spec,
+            label = "contextual-surface"
+        ) { i ->
+            ContextualCard(
+                item = items[i],
+                onMusicPlayPause = onMusicPlayPause,
+                onMusicNext = onMusicNext,
+                onMusicPrev = onMusicPrev,
+                onRequestNextEventPermission = onRequestNextEventPermission
+            )
+        }
+        if (items.size > 1) {
+            Spacer(Modifier.height(6.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                items.indices.forEach { dot ->
+                    val selected = dot == index
+                    Box(
+                        Modifier
+                            .size(if (selected) 8.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (selected) AuraTheme.colors.textPrimary
+                                else AuraTheme.colors.textSecondary.copy(alpha = 0.4f)
+                            )
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = "Contextual item ${dot + 1}",
+                                onClick = { index = dot }
+                            )
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContextualCard(
+    item: ContextualItem,
+    onMusicPlayPause: () -> Unit,
+    onMusicNext: () -> Unit,
+    onMusicPrev: () -> Unit,
+    onRequestNextEventPermission: () -> Unit
+) {
+    when (item) {
+        is CalendarContextualItem -> NextEventRow(
+            event = item.event, denied = item.denied, onRequestPermission = onRequestNextEventPermission
+        )
+        is BatteryContextualItem -> BatteryRow(battery = BatteryUiModel(item.percent, item.charging))
+        is MusicContextualItem -> MusicRow(
+            music = item.state, onPlayPause = onMusicPlayPause, onNext = onMusicNext, onPrev = onMusicPrev
+        )
     }
 }
 

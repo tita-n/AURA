@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
@@ -161,17 +162,28 @@ fun AppLibraryScreen(
                 }
             }
 
-            // Fast-scroll rail — RTL-aware (CenterEnd mirrors), 48dp targets, keyboard accessible
+            // Fast-scroll rail. RTL-aware (CenterEnd mirrors), 48dp targets, keyboard accessible.
+            // It lists ALL present letters and is itself independently scrollable, while also
+            // auto-following the active app-list section so every letter — including those
+            // far down the alphabet — stays reachable. (The previous static Column centered
+            // and clipped to ~A–O, hiding later letters behind the screen edge.)
             if (!rail.isNullOrEmpty() && filtered.size >= 8) {
-                Column(
+                val railState = rememberLazyListState()
+                // Keep the active letter visible in the rail as the app list scrolls.
+                LaunchedEffect(activeIndex) {
+                    if (rail.isNotEmpty()) railState.scrollToItem(activeIndex.coerceIn(0, rail.lastIndex))
+                }
+                LazyColumn(
+                    state = railState,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .fillMaxHeight()
                         .widthIn(min = 48.dp)
                         .semantics { contentDescription = "Alphabetical index" },
-                    verticalArrangement = Arrangement.Center
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    rail.forEach { section ->
+                    items(rail.size) { i ->
+                        val section = rail[i]
                         val isHash = section.letter == "#"
                         val isActive = section.letter == activeLetter
                         Box(

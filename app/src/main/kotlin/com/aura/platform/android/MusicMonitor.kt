@@ -11,6 +11,7 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.view.KeyEvent
 import com.aura.home.MusicState
+import com.aura.home.PlaybackMapper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -53,7 +54,9 @@ class MusicMonitor(private val context: Context) {
     @Synchronized
     fun start() {
         if (receiver != null) return
-        // Playback often stops when audio becomes noisy (headphones unplugged) — refresh then.
+        // Playback often stops/pauses when audio becomes noisy (headphones unplugged) —
+        // refresh then to clear a stale playing state. This is the strongest legitimate,
+        // permission-free signal a third-party launcher can use (no NotificationListener).
         val r = object : BroadcastReceiver() {
             override fun onReceive(c: Context?, intent: Intent?) {
                 if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) refresh()
@@ -61,6 +64,7 @@ class MusicMonitor(private val context: Context) {
         }
         context.registerReceiver(r, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
         receiver = r
+        refresh() // populate immediately
     }
 
     @Synchronized
@@ -94,11 +98,12 @@ class MusicMonitor(private val context: Context) {
     private fun reconcile() {
         val c = controller
         if (c != null) {
-            val playing = c.playbackState?.state == PlaybackState.STATE_PLAYING
             val meta = c.metadata
             val title = meta?.getString(MediaMetadata.METADATA_KEY_TITLE)
             val artist = meta?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-            _state.value = if (playing) MusicState.Playing(title, artist) else MusicState.Paused(title, artist)
+            // Pure mapping: only STATE_PLAYING/STATE_P has a visible state; stopped/
+            // buffering/connecting all resolve to Hidden (no stale paused icon).
+            _state.value = PlaybackMapper.derive(c.playbackState?.state, title, artist)
         } else {
             _state.value = MusicState.fromActive(audioManager.isMusicActive)
         }

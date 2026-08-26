@@ -37,10 +37,10 @@ Android handles Android. AURA handles intent.
 | Design Language / Direction tokens | ✅ Shipped |
 | Home editing (edit mode) | ✅ Implemented |
 | Dock customization (0–4 apps) | ✅ Implemented |
-| Native modules (Next Event, Battery, Music) | ✅ Implemented (contextual, optional) |
+| Contextual surface (Next Event, Battery, Music) | ✅ Implemented (one rotating surface) |
 | Android widget hosting (AppWidgetHost) | ✅ Implemented (single, size-constrained) |
 | Deterministic local-time greeting | ✅ Implemented |
-| Monochrome app icons (IconProcessor) | ✅ Implemented |
+| Monochrome app icons | ❌ Deferred — experiment frozen |
 | App Library A–Z rail + translucent surface | ✅ Implemented |
 | Wallpaper cross-device reliability | ✅ Implemented |
 | Reduced-motion (calm module animation) | ✅ Implemented |
@@ -81,16 +81,31 @@ Goal: make AURA genuinely pleasant to live with every day. Not smarter — more 
   (add/remove/rearrange modules & widgets, appearance, dock).
 - **Dock customization**: 0–4 installed apps, reorder, remove, tap-to-launch via the
   existing OpenApp execution path. Duplicates not permitted.
-- **Native modules**: Next Event (calendar, contextual READ_CALENDAR), Battery
-  (sticky broadcast, event-driven), Music (media-key transport, permission-free).
-  Modules are *optional and enabled by the user*, but only *visible when relevant*:
-  Next Event within 1h or ongoing, Battery ≤20% or charging, Music while playing.
-  Relevance is pure and deterministic (see `ModuleRelevance`) — no behavioral inference,
-  no tracking. Weather remains CUT. Modules are removable, local-first, event-driven.
-- **Monochrome icons**: launcher icons are recolored to the single AURA tone via the
-  native adaptive-monochrome layer (API 33+) when present, otherwise an AURA fallback
-  luminance→alpha transform — processed off the main thread and cached. No AI, no
-  edge detection, no per-device tuning.
+- **One contextual surface**: Next Event, Battery, and Music are NOT three separate
+  Home boxes. Each *enabled* source (enabled = "allowed to generate context", not
+  "permanently occupies Home") feeds a single surface that appears only when something
+  matters and, if several things matter at once, shows ONE card that rotates between them
+  (subtle auto-rotation; stops under reduced motion or when only one item remains).
+  Deterministic priority: **Calendar** (event within 1h / ongoing) > **Battery**
+  (≤20% or charging) > **Music** (playing/paused). Pure model in `ContextualEngine`
+  (`home/Contextual.kt`) — no ML, no behavioral prediction, no tracking.
+  - **Next Event** surfaces a *user* event within 1h or ongoing. Public-holiday and
+    birthday calendars, and all-day events, are excluded by deterministic calendar
+    metadata (`CalendarRelevance`) — AURA does NOT surface generic holidays as if they
+    were personal meetings. Heuristic, documented as such; hide rather than clutter.
+  - **Battery** is event-driven (sticky broadcast); hidden at healthy charge.
+  - **Music** uses MediaSessionManager / AudioManager (permission-free, **no
+    NotificationListener**). State reflects the real `PlaybackState` (`PlaybackMapper`);
+    track title/artist are shown only when Android legitimately exposes them, otherwise a
+    clean Playing/Paused fallback. Detection is event-driven (ON_RESUME + audio-focus
+    loss / `AUDIO_BECOMING_NOISY`). A third-party launcher without `MEDIA_CONTENT_CONTROL`
+    cannot receive active-session callbacks, so prompt appearance while backgrounded is
+    best-effort and honestly documented — no polling, no notification access.
+- **Monochrome icons**: DEFERRED. The previous experimental AURA monochrome
+  transformation produced inconsistent results across applications (a dark circular
+  background with a dimmed original icon for many apps) and was rejected rather than
+  shipped as a partial visual system. AURA now shows normal application icons. No further
+  icon-processing experiment is planned this phase.
 - **Third-party widgets**: AppWidgetManager/AppWidgetHost as an advanced optional layer,
   strictly separate from AURA-native modules. No marketplace, no restyling.
 - **Layout model**: fixed regions — Time/Presence, optional module/widget region,

@@ -58,4 +58,43 @@ class AppLibraryRailTest {
     @Test fun `empty sections have no target`() {
         assertNull(AppLibraryRail.targetIndexForLetter(emptyList(), "A"))
     }
+
+    @Test fun `late letters remain resolvable and selectable`() {
+        // Sparse alphabet with a late letter present.
+        val sections = listOf(sec("A", 0), sec("M", 13), sec("Z", 25))
+        // Active tracking for A / M / Z by scroll position.
+        assertEquals(0, AppLibraryRail.activeSectionIndex(sections, 0))
+        assertEquals(1, AppLibraryRail.activeSectionIndex(sections, 13))
+        assertEquals(2, AppLibraryRail.activeSectionIndex(sections, 25))
+        assertEquals(2, AppLibraryRail.activeSectionIndex(sections, 30)) // past the end -> last
+        // Tapping a late letter resolves to its start index (rail reaches Z).
+        assertEquals(0, AppLibraryRail.targetIndexForLetter(sections, "A"))
+        assertEquals(13, AppLibraryRail.targetIndexForLetter(sections, "M"))
+        assertEquals(25, AppLibraryRail.targetIndexForLetter(sections, "Z"))
+    }
+
+    @Test fun `rail follows the active section while scrolling downward`() {
+        // 26 letters, one per index.
+        val sections = ('A'..'Z').map { sec(it.toString(), it - 'A') }
+        assertEquals(0, AppLibraryRail.activeSectionIndex(sections, 0))
+        assertEquals(12, AppLibraryRail.activeSectionIndex(sections, 12)) // M
+        assertEquals(25, AppLibraryRail.activeSectionIndex(sections, 25)) // Z
+    }
+
+    @Test fun `reverse scrolling tracks the current position back upward`() {
+        val sections = ('A'..'Z').map { sec(it.toString(), it - 'A') }
+        // Moving the list index downward then back upward must move the active rail index
+        // with it (no faked/static position).
+        val downward = listOf(25, 20, 13, 5, 0)
+        val expected = listOf(25, 20, 13, 5, 0)
+        assertEquals(expected, downward.map { AppLibraryRail.activeSectionIndex(sections, it) })
+    }
+
+    @Test fun `list scroll index for a late letter skips the header`() {
+        val sections = listOf(sec("A", 0), sec("M", 13), sec("Z", 25))
+        // targetIndexForLetter returns the filtered-list index; listScrollIndex adds the header.
+        val zTarget = AppLibraryRail.targetIndexForLetter(sections, "Z")
+        assertNotNull(zTarget)
+        assertEquals(25 + AppLibraryRail.HEADER_OFFSET, AppLibraryRail.listScrollIndex(zTarget!!))
+    }
 }

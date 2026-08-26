@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
+import com.aura.home.CalendarRelevance
 import com.aura.home.NextEventInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,6 +66,33 @@ class NextEventProvider(private val context: Context) {
         return try { query(nowMillis, windowDays) } catch (_: Exception) { null }
     }
 
+    /** Resolve excluded (holiday/birthday) calendar ids and a name/account map for the rest. */
+    private fun calendarInfo(): Pair<Set<Long>, Map<Long, Pair<String?, String?>>> {
+        val excluded = mutableSetOf<Long>()
+        val names = mutableMapOf<Long, Pair<String?, String?>>()
+        val uri = CalendarContract.Calendars.CONTENT_URI
+        val proj = arrayOf(
+            CalendarContract.Calendars._ID,
+            CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Calendars.ACCOUNT_TYPE
+        )
+        try {
+            context.contentResolver.query(uri, proj, null, null, null)?.use { c ->
+                val idI = c.getColumnIndex(CalendarContract.Calendars._ID)
+                val nameI = c.getColumnIndex(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME)
+                val acctI = c.getColumnIndex(CalendarContract.Calendars.ACCOUNT_TYPE)
+                while (c.moveToNext()) {
+                    val id = if (idI >= 0) c.getLong(idI) else -1L
+                    val name = if (nameI >= 0) c.getString(nameI) else null
+                    val acct = if (acctI >= 0) c.getString(acctI) else null
+                    names[id] = name to acct
+                    if (CalendarRelevance.isHolidayOrNoiseCalendar(name, acct)) excluded.add(id)
+                }
+            }
+        } catch (_: Exception) {}
+        return excluded to names
+    }
+
     private fun query(nowMillis: Long, windowDays: Int): NextEventInfo? {
         val cr: ContentResolver = context.contentResolver
         val begin = nowMillis - 12L * 60 * 60 * 1000 // catch long ongoing events
@@ -74,22 +102,29 @@ class NextEventProvider(private val context: Context) {
             CalendarContract.Instances.TITLE,
             CalendarContract.Instances.BEGIN,
             CalendarContract.Instances.END,
-            CalendarContract.Instances.ALL_DAY
+            CalendarContract.Instances.ALL_DAY,
+            CalendarContract.Instances.CALENDAR_ID
         )
         val sortOrder = "${CalendarContract.Instances.BEGIN} ASC"
+        val (excluded, names) = calendarInfo()
         cr.query(instancesUri, projection, null, null, sortOrder)?.use { c ->
             val ti = c.getColumnIndex(CalendarContract.Instances.TITLE)
             val bi = c.getColumnIndex(CalendarContract.Instances.BEGIN)
             val ei = c.getColumnIndex(CalendarContract.Instances.END)
             val ai = c.getColumnIndex(CalendarContract.Instances.ALL_DAY)
+            val ci = c.getColumnIndex(CalendarContract.Instances.CALENDAR_ID)
             while (c.moveToNext()) {
+                val calId = if (ci >= 0) c.getLong(ci) else -1L
+                if (calId in excluded) continue // holiday / birthday noise
                 val title = if (ti >= 0) c.getString(ti) else null
                 val b = if (bi >= 0) c.getLong(bi) else 0L
                 val e = if (ei >= 0) c.getLong(ei) else 0L
                 val allDay = if (ai >= 0) c.getInt(ai) == 1 else false
+                if (allDay) continue // hide generic all-day noise by default
                 if (e < nowMillis) continue // already ended
                 val safeTitle = title?.takeIf { it.isNotBlank() } ?: "Event"
-                return NextEventInfo(safeTitle, b, e, allDay)
+                val (calName, calAcct) = names[calId] ?: (null to null)
+                return NextEventInfo(safeTitle, b, e, allDay, calName, calAcct)
             }
         }
         return null

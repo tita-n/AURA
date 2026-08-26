@@ -64,7 +64,18 @@ data class HomeSettings(
 
 /** Shared module data — lives in home so UI can import without pulling platform. */
 data class BatteryUiModel(val percent: Int, val charging: Boolean)
-data class NextEventInfo(val title: String, val beginMillis: Long, val endMillis: Long, val allDay: Boolean)
+/**
+ * A calendar event. [calendarName]/[accountType] let relevance logic distinguish
+ * user-created events from holiday/birthday noise (see [CalendarRelevance]).
+ */
+data class NextEventInfo(
+    val title: String,
+    val beginMillis: Long,
+    val endMillis: Long,
+    val allDay: Boolean,
+    val calendarName: String? = null,
+    val accountType: String? = null
+)
 
 /**
  * Music module state — pure, Android-free so UI and tests can use it directly.
