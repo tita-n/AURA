@@ -1,9 +1,11 @@
 package com.aura.platform.android
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.provider.AlarmClock
 import android.provider.Settings
+import android.util.Log
 import com.aura.domain.AuraAction
 import com.aura.resolver.l3.ValidatedAction
 
@@ -77,71 +79,60 @@ class AndroidActionExecutor(
     }
 
     private fun executeSetTimer(action: AuraAction.SetTimer): ExecutionResult {
-        val pm = context.packageManager
-        val secs = action.durationSeconds.coerceIn(1, 24 * 3600)
-        // TECNO/HiOS and some OEM desk clocks ignore EXTRA_SKIP_UI=true or require a message.
-        // Try showing UI first (most compatible), then skip-ui variant.
-        val candidates = listOf(
-            Intent(AlarmClock.ACTION_SET_TIMER).apply {
-                putExtra(AlarmClock.EXTRA_LENGTH, secs)
-                putExtra(AlarmClock.EXTRA_MESSAGE, "AURA Timer")
-                putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-            Intent(AlarmClock.ACTION_SET_TIMER).apply {
-                putExtra(AlarmClock.EXTRA_LENGTH, secs)
-                putExtra(AlarmClock.EXTRA_MESSAGE, "AURA Timer")
-                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-            Intent(AlarmClock.ACTION_SET_TIMER).apply {
-                putExtra(AlarmClock.EXTRA_LENGTH, secs)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-        )
-        for (intent in candidates) {
-            if (intent.resolveActivity(pm) == null) continue
-            try {
-                context.startActivity(intent)
-                return ExecutionResult.Success
-            } catch (_: Exception) { continue }
+        val secs = action.durationSeconds
+        // Defensive: L3 already validated 1..86400, but guard against stale callers.
+        if (secs <= 0 || secs > 24 * 3600) {
+            Log.d("AURA_TIMER", "SetTimer rejected: durationSeconds=$secs out of range")
+            return ExecutionResult.Failure("Invalid timer duration")
         }
-        // Fallback: directly launch a known clock package so user at least lands in Clock
-        val clockPkgs = listOf(
-            "com.android.deskclock", "com.google.android.deskclock",
-            "com.transsion.deskclock", "com.transsion.clock", "com.sec.android.app.clockpackage",
-            "com.oneplus.deskclock", "com.miui.deskclock"
-        )
-        for (pkg in clockPkgs) {
-            val li = pm.getLaunchIntentForPackage(pkg) ?: continue
-            li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try { context.startActivity(li); return ExecutionResult.Success } catch (_: Exception) { continue }
+        // Build the correct timer intent — EXTRA_LENGTH is seconds, not millis.
+        // See https://developer.android.com/reference/android/provider/AlarmClock#ACTION_SET_TIMER
+        val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
+            putExtra(AlarmClock.EXTRA_LENGTH, secs)
+            putExtra(AlarmClock.EXTRA_MESSAGE, "AURA Timer")
+            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        return ExecutionResult.Failure("No timer app found on this device")
+        Log.d("AURA_TIMER", "SetTimer duration=$secs intent=${intent.action} length=${intent.getIntExtra(AlarmClock.EXTRA_LENGTH, -1)} skipUi=${intent.getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, false)}")
+        // Package visibility: resolveActivity() returns null on API 30+ if <queries> missing,
+        // even when a handler exists. We therefore do NOT treat null as definitive Unavailable —
+        // we still try startActivity and let ActivityNotFoundException decide.
+        val handler = try { intent.resolveActivity(context.packageManager) } catch (_: Exception) { null }
+        Log.d("AURA_TIMER", "SetTimer handler=$handler")
+        return try {
+            context.startActivity(intent)
+            Log.d("AURA_TIMER", "SetTimer launch attempted — handler=$handler result=Success")
+            ExecutionResult.Success
+        } catch (e: ActivityNotFoundException) {
+            Log.d("AURA_TIMER", "SetTimer ActivityNotFound: ${e.message}")
+            ExecutionResult.Unavailable
+        } catch (e: Exception) {
+            Log.d("AURA_TIMER", "SetTimer failed: ${e.javaClass.simpleName} ${e.message}")
+            ExecutionResult.Failure(e.message ?: "Failed to set timer")
+        }
     }
 
     private fun executeSetAlarm(action: AuraAction.SetAlarm): ExecutionResult {
-        val pm = context.packageManager
-        val candidates = listOf(
-            Intent(AlarmClock.ACTION_SET_ALARM).apply {
-                putExtra(AlarmClock.EXTRA_HOUR, action.hour)
-                putExtra(AlarmClock.EXTRA_MINUTES, action.minute)
-                putExtra(AlarmClock.EXTRA_MESSAGE, "AURA Alarm")
-                putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-            Intent(AlarmClock.ACTION_SET_ALARM).apply {
-                putExtra(AlarmClock.EXTRA_HOUR, action.hour)
-                putExtra(AlarmClock.EXTRA_MINUTES, action.minute)
-                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-        )
-        for (intent in candidates) {
-            if (intent.resolveActivity(pm) == null) continue
-            try { context.startActivity(intent); return ExecutionResult.Success } catch (_: Exception) { continue }
+        if (action.hour !in 0..23 || action.minute !in 0..59) {
+            return ExecutionResult.Failure("Invalid alarm time")
         }
-        return ExecutionResult.Failure("No alarm app found")
+        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+            putExtra(AlarmClock.EXTRA_HOUR, action.hour)
+            putExtra(AlarmClock.EXTRA_MINUTES, action.minute)
+            putExtra(AlarmClock.EXTRA_MESSAGE, "AURA Alarm")
+            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val handler = try { intent.resolveActivity(context.packageManager) } catch (_: Exception) { null }
+        Log.d("AURA_TIMER", "SetAlarm hour=${action.hour} minute=${action.minute} handler=$handler")
+        return try {
+            context.startActivity(intent)
+            ExecutionResult.Success
+        } catch (e: ActivityNotFoundException) {
+            ExecutionResult.Unavailable
+        } catch (e: Exception) {
+            ExecutionResult.Failure(e.message ?: "Failed to set alarm")
+        }
     }
 
     private fun executeDial(action: AuraAction.Dial): ExecutionResult {

@@ -7,11 +7,20 @@
     <!-- READ_CALENDAR: requested contextually when enabling the Next Event module. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
 
-    <!-- Package visibility for launcher discovery (API 30+) — minimal, only MAIN/LAUNCHER -->
+    <!-- Package visibility for launcher discovery (API 30+) -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- Timer/Alarm execution must be queryable on API 30+; without this,
+             resolveActivity() returns null due to package visibility, causing the
+             executor to falsely fallback to just opening Clock without a timer. -->
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM" />
         </intent>
     </queries>
 
