@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!-- READ_CALENDAR: requested contextually when enabling the Next Event module. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Required to start AlarmClock timer/alarm on TECNO/HiOS (HandleSetAlarmApiCalls
+         declares android:permission="com.android.alarm.permission.SET_ALARM").
+         Without this, SET_TIMER throws SecurityException: Permission Denial. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <!-- Package visibility for launcher discovery (API 30+) -->
     <queries>

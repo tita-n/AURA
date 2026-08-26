@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -113,12 +114,21 @@ private fun ActContent(
         return
     }
     if (result.type == ResultType.Alarm || result.type == ResultType.Timer) {
-        InlineConfirmation(
-            phrase = result.title,
-            // Undo dismisses the confirmation and returns to idle — AURA cannot identify
-            // the exact system timer to cancel, so it never claims cancellation.
-            onUndo = onUndo
-        )
+        // Timer/Alarm: show tappable confirmation — tap the card or press IME Search to
+        // actually create the system timer/alarm. This keeps execution explicit (user
+        // must activate) while matching the expected "tap the result to set" UX.
+        // Undo dismisses without claiming cancellation (we cannot identify the exact timer).
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(AuraTheme.radius.small))
+                .clickable(role = androidx.compose.ui.semantics.Role.Button) { onActExecute(result) }
+        ) {
+            InlineConfirmation(
+                phrase = result.title,
+                onUndo = onUndo
+            )
+        }
         return
     }
 
