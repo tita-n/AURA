@@ -29,6 +29,10 @@ import com.aura.platform.android.MusicMonitor
 import com.aura.platform.android.NextEventProvider
 import com.aura.platform.android.AuraWidgetHost
 import com.aura.platform.android.WallpaperPicker
+import com.aura.platform.android.WallpaperAnalyzer
+import com.aura.home.WallpaperTreatment
+import android.content.BroadcastReceiver
+import android.os.Build
 import com.aura.resolver.IntentRouter
 import com.aura.resolver.L0IndexFactory
 import com.aura.resolver.L0Resolver
@@ -88,6 +92,60 @@ class MainActivity : ComponentActivity() {
                     val bg = if (isDarkTheme) 0xFF0A0A0B.toInt() else 0xFFFAF9F6.toInt()
                     w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(bg))
                 }
+            }
+
+            // ---- Wallpaper treatment (adaptive darkening) ----
+            // AURA shows the *system* wallpaper behind a transparent window (FLAG_SHOW_WALLPAPER).
+            // We only sample its brightness (cheap: WallpaperColors API 27+, else a 100x100
+            // bitmap sample on IO) to pick a scrim alpha. Result is cached by wallpaper id.
+            val wallpaperAnalyzer = remember(context) { WallpaperAnalyzer(context.applicationContext) }
+            var wallpaperTreatment by remember { mutableStateOf<WallpaperTreatment?>(null) }
+
+            fun refreshWallpaperTreatment() {
+                if (!wallpaperEnabled) { wallpaperTreatment = null; return }
+                scope.launch {
+                    wallpaperAnalyzer.clearCache()
+                    wallpaperTreatment = wallpaperAnalyzer.analyze()
+                }
+            }
+
+            LaunchedEffect(wallpaperEnabled) {
+                if (wallpaperEnabled) {
+                    wallpaperTreatment = wallpaperAnalyzer.analyze()
+                } else {
+                    wallpaperAnalyzer.clearCache()
+                    wallpaperTreatment = null
+                }
+            }
+
+            // Detect wallpaper changes WITHOUT polling:
+            //  - broadcast ACTION_WALLPAPER_CHANGED (all APIs)
+            //  - on resume, because the wallpaper picker is a separate activity (AURA pauses)
+            DisposableEffect(context, wallpaperEnabled) {
+                if (!wallpaperEnabled) return@DisposableEffect onDispose {}
+                val receiver = object : BroadcastReceiver() {
+                    override fun onReceive(c: android.content.Context?, i: android.content.Intent?) {
+                        // Intent.ACTION_WALLPAPER_CHANGED is deprecated in the SDK but remains the
+                        // live broadcast sent when the wallpaper changes; use the literal.
+                        if (i?.action == "android.intent.action.WALLPAPER_CHANGED") refreshWallpaperTreatment()
+                    }
+                }
+                val filter = android.content.IntentFilter("android.intent.action.WALLPAPER_CHANGED")
+                if (Build.VERSION.SDK_INT >= 33) {
+                    context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.registerReceiver(receiver, filter)
+                }
+                onDispose { context.unregisterReceiver(receiver) }
+            }
+
+            DisposableEffect(this@MainActivity.lifecycle) {
+                val obs = LifecycleEventObserver { _, e ->
+                    if (e == Lifecycle.Event.ON_RESUME && wallpaperEnabled) refreshWallpaperTreatment()
+                }
+                this@MainActivity.lifecycle.addObserver(obs)
+                onDispose { this@MainActivity.lifecycle.removeObserver(obs) }
             }
 
             // ---- Widget host ----
@@ -405,7 +463,7 @@ class MainActivity : ComponentActivity() {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(AuraTheme.colors.surfaceBase)
+                            .background(if (wallpaperEnabled) androidx.compose.ui.graphics.Color.Transparent else AuraTheme.colors.surfaceBase)
                     ) {
                         HomeScreen(
                             commandState = commandState,
@@ -528,6 +586,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             wallpaperEnabled = homeSettings.customization.showWallpaper,
+                            wallpaperTreatment = wallpaperTreatment,
                             onOpenEdit = { editSurface = EditSurface.Main }
                         )
 

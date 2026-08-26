@@ -39,7 +39,7 @@ Android handles Android. AURA handles intent.
 | Dock customization (0–5 apps) | 🚧 This phase |
 | Native modules (Next Event, Battery, Music) | 🚧 This phase |
 | Android widget hosting (AppWidgetHost) | 🚧 This phase |
-| Customization (theme, accent, wallpaper entry, animation) | 🚧 This phase |
+| Customization (theme, accent, wallpaper entry, animation) | ✅ Implemented |
 | Weather module | ❌ CUT — network-dependent; violates local-first |
 
 ## NOTIFICATION PANEL — REJECTED
@@ -88,6 +88,15 @@ Goal: make AURA genuinely pleasant to live with every day. Not smarter — more 
   Wallpaper (system picker entry), Animation (Standard/Reduced). Explicitly excluded:
   arbitrary fonts, icon marketplaces, free grids, custom animation editors,
   unrestricted color pickers, theme marketplaces.
+- **Wallpaper model**: AURA shows the **system** wallpaper behind a transparent
+  window (`FLAG_SHOW_WALLPAPER`) — it never copies or renders the bitmap itself.
+  Readability comes from an **adaptive dark scrim** whose alpha is chosen by the
+  wallpaper's brightness (Dark 0.50 / Medium 0.70 / Bright 0.82 / VeryBright 0.90),
+  drawn as a bottom-weighted vertical gradient so the Command Bar and dock stay
+  readable on bright wallpapers. Brightness is estimated cheaply via
+  `WallpaperManager.getWallpaperColors()` (API 27+, no bitmap decode) and cached by
+  wallpaper id; changes are detected event-driven (broadcast + `ON_RESUME`), never
+  polled. Full design in [`WALLPAPER.md`](WALLPAPER.md).
 - **Persistence**: SharedPreferences-backed key/value store (`aura_home.xml`). Room deliberately NOT
   introduced — the layout model is a small ordered list plus scalar settings;
   SharedPreferences covers it exactly. Rationale documented in code.

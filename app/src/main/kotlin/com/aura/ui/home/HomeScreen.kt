@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aura.design.AuraTheme
 import com.aura.design.auraFocusRing
@@ -36,6 +37,9 @@ import com.aura.home.DockItem
 import com.aura.home.HomeModuleType
 import com.aura.home.NextEventInfo
 import com.aura.home.Presence
+import com.aura.home.WallpaperBrightness
+import com.aura.home.WallpaperTreatment
+import com.aura.home.WallpaperTreatmentResolver
 import com.aura.platform.AppIcon
 import com.aura.resolver.IndexedEntity
 import com.aura.ui.command.CommandBar
@@ -92,6 +96,7 @@ fun HomeScreen(
     widgetIds: List<Int> = emptyList(),
     widgetContent: @Composable (Int) -> Unit = {},
     wallpaperEnabled: Boolean = false,
+    wallpaperTreatment: WallpaperTreatment? = null,
     onOpenEdit: () -> Unit = {}
 ) {
     val colors = AuraTheme.colors
@@ -110,10 +115,25 @@ fun HomeScreen(
 
     Box(Modifier.fillMaxSize()) {
         if (wallpaperEnabled) {
-            // Wallpaper is the Window behind the activity (FLAG_SHOW_WALLPAPER in MainActivity).
-            // This scrim tints it so textPrimary still hits 4.5:1 on white wallpapers
-            // (alpha 0.82 = 18% wallpaper show-through, math in PRODUCT.md).
-            Box(Modifier.fillMaxSize().background(colors.surfaceBase.copy(alpha = 0.82f)))
+            // Wallpaper is the system wallpaper behind the transparent activity window
+            // (FLAG_SHOW_WALLPAPER in MainActivity). We darken it with a vertical scrim:
+            // top = adaptive alpha for the wallpaper class, bottom slightly stronger so the
+            // Command Bar / dock stay readable on bright wallpapers. The wallpaper itself
+            // remains visible — AURA only controls the darkening.
+            val treatment = wallpaperTreatment
+                ?: WallpaperTreatment(WallpaperBrightness.Bright, WallpaperTreatmentResolver.ALPHA_BRIGHT)
+            val topAlpha = treatment.scrimAlpha.coerceIn(0f, 1f)
+            val bottomAlpha = WallpaperTreatmentResolver.bottomAlpha(treatment).coerceIn(0f, 1f)
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            colors.surfaceBase.copy(alpha = topAlpha),
+                            colors.surfaceBase.copy(alpha = bottomAlpha)
+                        )
+                    )
+                )
+            )
         }
 
         Column(
@@ -281,8 +301,9 @@ private fun TimeAndPresenceBlock(
     val typography = AuraTheme.typography
     val timeText = remember(nowMillis) { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(nowMillis)) }
     val dateText = remember(nowMillis) { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date(nowMillis)) }
-    // When wallpaper is visible, all home text uses textPrimary so contrast holds with 82% scrim.
-    // At 72% alpha secondary fails on white wallpapers; primary is the safe choice.
+    // When wallpaper is visible, all home text uses textPrimary so contrast holds with the
+    // adaptive scrim (>=0.70 on bright wallpapers). At 0.72 alpha secondary fails on white
+    // wallpapers; primary is the safe choice.
     val secondary = if (wallpaperEnabled) colors.textPrimary else colors.textSecondary
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(timeText, style = typography.display, color = colors.textPrimary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())

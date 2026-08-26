@@ -6,7 +6,9 @@ import android.content.Intent
 /**
  * Wallpaper picker — system-owned capability, intent factory only.
  * Rendering behind Home is intentionally gated by [com.aura.home.HomeCustomization.showWallpaper];
- * when true a flat scrim (surfaceBase at ~94% alpha) preserves AA contrast against any wallpaper.
+ * when true AURA makes its window transparent (FLAG_SHOW_WALLPAPER) and draws an adaptive
+ * dark scrim (see [com.aura.home.WallpaperTreatmentResolver]) that keeps text readable while
+ * preserving the user's wallpaper.
  */
 object WallpaperPicker {
 

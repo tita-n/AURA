@@ -41,12 +41,12 @@ Resolver → Validation → ACT / ASK → explicit user action → Platform Exec
 
 - `app/src/main/kotlin/com/aura/domain` — pure `CommandState`, `ResolutionOutcome`, `AuraAction`
 - `app/src/main/kotlin/com/aura/resolver` — `L0`, `l1/`, `l2/`, `l3/` (pure Kotlin)
-- `app/src/main/kotlin/com/aura/platform/android` — `AndroidAppIndexProvider`, `AndroidContactIndexProvider`, `AndroidActionExecutor`, `AuraPrefs` (SharedPreferences), `AuraWidgetHost`, `BatteryMonitor`, etc. — the only Android boundary
+- `app/src/main/kotlin/com/aura/platform/android` — `AndroidAppIndexProvider`, `AndroidContactIndexProvider`, `AndroidActionExecutor`, `AuraPrefs` (SharedPreferences), `AuraWidgetHost`, `BatteryMonitor`, `WallpaperAnalyzer`, `WallpaperPicker`, etc. — the only Android boundary
 - `app/src/main/kotlin/com/aura/ui` — Compose UI (`home/`, `command/`, `library/`, `components/`) — reads only `CommandState` and design tokens
 - `app/src/main/kotlin/com/aura/design` — `AuraTheme`, `AuraColors`, `AuraTokens`, `AuraFocus` — single source of truth
-- `app/src/main/kotlin/com/aura/home` — Home layout model (`DockLogic`, `ModuleLogic`, persistence codecs) — pure
+- `app/src/main/kotlin/com/aura/home` — Home layout model (`DockLogic`, `ModuleLogic`, persistence codecs) — pure; also `WallpaperTreatment` (pure brightness→scrim resolver)
 
-See [`docs/PRODUCT.md`](docs/PRODUCT.md) for the authoritative product/roadmap description, and the `design/` package for tokens. The Technical Specification and Design Language are referenced throughout the codebase via `// PRD §` / `// Design Language §` comments and are summarized in `PRODUCT.md`.
+See [`docs/PRODUCT.md`](docs/PRODUCT.md) for the authoritative product/roadmap description, [`docs/WALLPAPER.md`](docs/WALLPAPER.md) for the wallpaper model and adaptive dark treatment, and the `design/` package for tokens. The Technical Specification and Design Language are referenced throughout the codebase via `// PRD §` / `// Design Language §` comments and are summarized in `PRODUCT.md`.
 
 ---
 
@@ -141,11 +141,11 @@ Implemented:
 - Real app indexing (`PackageManager` off-main-thread + `PackageChangeMonitor`, event-driven, no polling)
 - Real contacts indexing (contextual `READ_CONTACTS`)
 - App Library (alphabetical, live search with `Normalizer` parity, A–Z rail)
-- Home customization: `System/Dark/Light`, `Dynamic` + 6 curated accents (WCAG 4.5:1), wallpaper via `FLAG_SHOW_WALLPAPER` + `0.82` scrim, `Standard/Reduced` motion
+- Home customization: `System/Dark/Light`, `Dynamic` + 6 curated accents (WCAG 4.5:1), wallpaper via `FLAG_SHOW_WALLPAPER` + **adaptive dark scrim** (0.50–0.90 by brightness, with a bottom-weighted gradient for the Command Bar), `Standard/Reduced` motion
 - Native modules `NextEvent` (calendar `ContentObserver`, off-`IO`), `Battery` (sticky `ACTION_BATTERY_CHANGED`), `Music` (media-key transport, no `NotificationListener`)
 - Android widget host (`AppWidgetHost`/`AppWidgetManager`, discovery `HOME_SCREEN`, bind/configure, `OPTION_APPWIDGET_SIZES` on API 31+, prune on uninstall)
 
-Known limitations: widget resize is responsive via size reporting (no custom drag overlay yet), wallpaper contrast is `0.82` scrim (visible but calm), backup is device-local, no `L4`/AI/cloud.
+Known limitations: widget resize is responsive via size reporting (no custom drag overlay yet), backup is device-local, no `L4`/AI/cloud. (Wallpaper uses an adaptive dark scrim — calm on dark wallpapers, stronger on bright ones — not a fixed overlay.)
 
 ---
 
