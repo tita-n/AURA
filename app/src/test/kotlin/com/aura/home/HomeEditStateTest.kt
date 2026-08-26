@@ -1,4 +1,5 @@
 package com.aura.home
+import com.aura.TestPaths
 
 import org.junit.Assert.*
 import org.junit.Test
@@ -54,7 +55,7 @@ class HomeEditStateTest {
         // Read the CommandState.kt source to verify no Edit-related variant was added.
         // Avoids kotlin-reflect dependency (not on test classpath).
         val candidates = listOf(
-            java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain/CommandState.kt"),
+            TestPaths.find("app/src/main/kotlin/com/aura/domain/CommandState.kt"),
             java.io.File("app/src/main/kotlin/com/aura/domain/CommandState.kt"),
             java.io.File((System.getProperty("user.dir") ?: ".") + "/app/src/main/kotlin/com/aura/domain/CommandState.kt")
         )
@@ -70,7 +71,7 @@ class HomeEditStateTest {
         assertFalse("CommandState must not contain DockPicker", text.contains("DockPicker"))
         // EditSurface must exist as a separate type
         val editCandidates = listOf(
-            java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/home/HomeEditState.kt"),
+            TestPaths.find("app/src/main/kotlin/com/aura/home/HomeEditState.kt"),
             java.io.File("app/src/main/kotlin/com/aura/home/HomeEditState.kt")
         )
         val editFile = checkNotNull(editCandidates.firstOrNull { it.exists() }) { "HomeEditState.kt not found" }

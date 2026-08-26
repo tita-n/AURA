@@ -1,4 +1,5 @@
 package com.aura.resolver.l3
+import com.aura.TestPaths
 
 import com.aura.domain.*
 import com.aura.resolver.L0IndexFactory
@@ -87,7 +88,7 @@ class ExecutionIntegrationTest {
         assertTrue(failOutcome::class.simpleName in allowed)
         assertTrue(unavailOutcome::class.simpleName in allowed)
         // No Executing/Permission/Launching/L3 state exists anywhere in domain source
-        val src = File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain").walkTopDown()
+        val src = TestPaths.find("app/src/main/kotlin/com/aura/domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" }.readTexts()
         assertFalse(src.contains("ExecutingState") || src.contains("PermissionState") || src.contains("LaunchingState"))
     }
@@ -118,14 +119,14 @@ class ExecutionIntegrationTest {
     @Test fun `typing alone never executes - route is pure`() {
         // Routing produces outcomes with no side effects; executor is a separate object
         // that routing never touches. Structural proof: IntentRouter has no executor field.
-        val routerSrc = File("/home/titan/AURA/app/src/main/kotlin/com/aura/resolver/IntentRouter.kt").readText()
+        val routerSrc = TestPaths.find("app/src/main/kotlin/com/aura/resolver/IntentRouter.kt").readText()
         assertFalse(routerSrc.contains("ActionExecutor"))
         assertFalse(routerSrc.contains("executor"))
         assertFalse(routerSrc.contains("startActivity"))
     }
 
     @Test fun `ACT resolution alone never executes - no executor call in resolver layers`() {
-        val l3src = File("/home/titan/AURA/app/src/main/kotlin/com/aura/resolver/l3/L3Validator.kt").readText()
+        val l3src = TestPaths.find("app/src/main/kotlin/com/aura/resolver/l3/L3Validator.kt").readText()
         assertFalse(l3src.contains("startActivity"))
         assertFalse(l3src.contains("ActionExecutor"))
         // Validation produces ValidatedAction; execution happens only via ActionExecutor.execute
@@ -133,13 +134,13 @@ class ExecutionIntegrationTest {
     }
 
     @Test fun `only platform android may execute`() {
-        val mainSrc = File("/home/titan/AURA/app/src/main/kotlin/com/aura/MainActivity.kt").readText()
+        val mainSrc = TestPaths.find("app/src/main/kotlin/com/aura/MainActivity.kt").readText()
         // MainActivity wires executors/providers but never constructs or starts Intents itself
         assertFalse(mainSrc.contains("import android.content.Intent"))
         assertFalse(mainSrc.contains("startActivity"))
         assertTrue(mainSrc.contains("AndroidActionExecutor"))
         // Role intents also live behind the platform boundary
-        val roleSrc = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/LauncherRoleHelper.kt").readText()
+        val roleSrc = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/LauncherRoleHelper.kt").readText()
         assertTrue(roleSrc.contains("createRequestRoleIntent"))
     }
 
@@ -168,10 +169,10 @@ class ExecutionIntegrationTest {
             "import android.provider.AlarmClock", "import android.net.Uri", "startActivity"
         )
         val dirs = listOf(
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain"),
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/resolver"),
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui"),
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/MainActivity.kt")
+            TestPaths.find("app/src/main/kotlin/com/aura/domain"),
+            TestPaths.find("app/src/main/kotlin/com/aura/resolver"),
+            TestPaths.find("app/src/main/kotlin/com/aura/ui"),
+            TestPaths.find("app/src/main/kotlin/com/aura/MainActivity.kt")
         )
         dirs.forEach { d ->
             val files = if (d.isDirectory) d.walkTopDown().filter { it.isFile && it.extension == "kt" } else sequenceOf(d)
@@ -184,7 +185,7 @@ class ExecutionIntegrationTest {
     }
 
     @Test fun `ExecutionResult has no Android types`() {
-        val text = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").readText()
+        val text = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").readText()
         val section = text.substringAfter("sealed interface ExecutionResult").substringBefore("interface ActionExecutor")
         assertFalse(section.contains("Intent"))
         assertFalse(section.contains("Exception"))
@@ -202,7 +203,7 @@ class ExecutionIntegrationTest {
     // ---- Undo contract: honest only ----
 
     @Test fun `undo does not claim system timer cancellation`() {
-        val hostSrc = File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui/command/CommandStateHost.kt").readText()
+        val hostSrc = TestPaths.find("app/src/main/kotlin/com/aura/ui/command/CommandStateHost.kt").readText()
         assertTrue(hostSrc.contains("never claims cancellation") || hostSrc.contains("cannot identify"))
         // No AlarmClock cancel intent anywhere in UI
         assertFalse(hostSrc.contains("ACTION_CANCEL_TIMER"))

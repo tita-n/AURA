@@ -1,4 +1,5 @@
 package com.aura.launcher
+import com.aura.TestPaths
 
 import com.aura.resolver.L0IndexFactory
 import com.aura.resolver.IndexedEntity
@@ -22,7 +23,7 @@ class LauncherLibraryTest {
     // ---- ROLE ----
 
     @Test fun `manifest exposes HOME and DEFAULT categories`() {
-        val manifest = File("/home/titan/AURA/app/src/main/AndroidManifest.xml").readText()
+        val manifest = TestPaths.find("app/src/main/AndroidManifest.xml").readText()
         assertTrue(manifest.contains("android.intent.category.HOME"))
         assertTrue(manifest.contains("android.intent.category.DEFAULT"))
         // LAUNCHER retained for normal install/launch behavior
@@ -30,7 +31,7 @@ class LauncherLibraryTest {
     }
 
     @Test fun `role request uses RoleManager with settings fallback`() {
-        val helper = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/LauncherRoleHelper.kt").readText()
+        val helper = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/LauncherRoleHelper.kt").readText()
         assertTrue(helper.contains("ROLE_HOME"))
         assertTrue(helper.contains("createRequestRoleIntent"))
         assertTrue(helper.contains("ACTION_HOME_SETTINGS")) // pre-29 / unavailable fallback
@@ -38,9 +39,9 @@ class LauncherLibraryTest {
     }
 
     @Test fun `role banner is session-scoped - no persistent nagging`() {
-        val main = File("/home/titan/AURA/app/src/main/kotlin/com/aura/MainActivity.kt").readText()
+        val main = TestPaths.find("app/src/main/kotlin/com/aura/MainActivity.kt").readText()
         assertTrue(main.contains("roleBannerDismissed"))
-        val helper = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/LauncherRoleHelper.kt").readText()
+        val helper = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/LauncherRoleHelper.kt").readText()
         assertTrue(helper.contains("isRoleHeld")) // once granted, banner condition false forever
     }
 
@@ -117,12 +118,12 @@ class LauncherLibraryTest {
     // ---- ARCHITECTURE ----
 
     @Test fun `library logic contains no Android imports`() {
-        val src = File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui/library/AppLibraryLogic.kt").readText()
+        val src = TestPaths.find("app/src/main/kotlin/com/aura/ui/library/AppLibraryLogic.kt").readText()
         assertFalse(src.contains("import android."))
     }
 
     @Test fun `package refresh is event-driven not polling`() {
-        val src = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/PackageChangeMonitor.kt").readText()
+        val src = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/PackageChangeMonitor.kt").readText()
         assertTrue(src.contains("PACKAGE_ADDED"))
         assertTrue(src.contains("PACKAGE_REMOVED"))
         assertTrue(src.contains("PACKAGE_REPLACED"))
@@ -134,7 +135,7 @@ class LauncherLibraryTest {
 
     @Test fun `no new CommandState introduced`() {
         val allowed = setOf("Idle", "Input", "Act", "Ask", "Empty", "Error")
-        File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain/CommandState.kt").readText().let { src ->
+        TestPaths.find("app/src/main/kotlin/com/aura/domain/CommandState.kt").readText().let { src ->
             allowed.forEach { s -> assert(src.contains(s)) }
             assertFalse(src.contains("LibraryState") || src.contains("ExecutingState"))
         }

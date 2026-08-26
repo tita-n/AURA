@@ -1,4 +1,5 @@
 package com.aura.resolver.l3
+import com.aura.TestPaths
 
 import com.aura.domain.AuraAction
 import com.aura.domain.ResolvedResult
@@ -13,7 +14,7 @@ class ExecutionBoundaryTest {
 
     @Test fun `executor accepts ValidatedAction not AuraAction`() {
         // Verify ActionExecutor signature requires ValidatedAction
-        val executorFile = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt")
+        val executorFile = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt")
         val text = executorFile.readText()
         assertTrue(text.contains("suspend fun execute(action: ValidatedAction)"))
         assertFalse(text.contains("suspend fun execute(action: AuraAction)"))
@@ -47,9 +48,9 @@ class ExecutionBoundaryTest {
             "startActivity"
         )
         val dirs = listOf(
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain"),
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/resolver"),
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui")
+            TestPaths.find("app/src/main/kotlin/com/aura/domain"),
+            TestPaths.find("app/src/main/kotlin/com/aura/resolver"),
+            TestPaths.find("app/src/main/kotlin/com/aura/ui")
         )
         dirs.forEach { dir ->
             dir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
@@ -62,13 +63,13 @@ class ExecutionBoundaryTest {
     }
 
     @Test fun `only platform android may contain execution APIs`() {
-        val platformDir = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android")
+        val platformDir = TestPaths.find("app/src/main/kotlin/com/aura/platform/android")
         val files = platformDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
         assertTrue(files.isNotEmpty())
         val hasIntent = files.any { it.readText().contains("import android.content.Intent") }
         assertTrue("platform should contain Intent", hasIntent)
         // Domain should not
-        val domainHasIntent = File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain").walkTopDown()
+        val domainHasIntent = TestPaths.find("app/src/main/kotlin/com/aura/domain").walkTopDown()
             .any { it.isFile && it.extension == "kt" && it.readText().contains("import android.content.Intent") }
         assertFalse(domainHasIntent)
     }
@@ -107,7 +108,7 @@ class ExecutionBoundaryTest {
 
     @Test fun `ValidatedAction is required for execution - direct AuraAction not executable`() {
         // Verify that AndroidActionExecutor's execute method requires ValidatedAction, not AuraAction
-        val executorText = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").readText()
+        val executorText = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").readText()
         assertTrue(executorText.contains("ValidatedAction"))
         assertFalse(executorText.contains("fun execute(action: AuraAction"))
     }

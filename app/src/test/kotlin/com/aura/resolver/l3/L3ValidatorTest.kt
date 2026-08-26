@@ -1,4 +1,5 @@
 package com.aura.resolver.l3
+import com.aura.TestPaths
 
 import com.aura.domain.AuraAction
 import com.aura.domain.ResolvedResult
@@ -118,8 +119,8 @@ class L3ValidatorTest {
     }
 
     @Test fun `16 Android APIs never enter domain resolver`() {
-        val dirDomain = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain")
-        val dirResolver = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/resolver")
+        val dirDomain = TestPaths.find("app/src/main/kotlin/com/aura/domain")
+        val dirResolver = TestPaths.find("app/src/main/kotlin/com/aura/resolver")
         (dirDomain.walkTopDown() + dirResolver.walkTopDown()).filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val t = f.readText()
             assertFalse("${f.name} must not import Intent", t.contains("import android.content.Intent"))
@@ -129,10 +130,10 @@ class L3ValidatorTest {
     }
 
     @Test fun `17 Android APIs only exist inside platform boundary`() {
-        val platformValidator = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionValidator.kt")
+        val platformValidator = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionValidator.kt")
         assertTrue(platformValidator.exists())
         assertTrue(platformValidator.readText().contains("PackageManager"))
-        val executor = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt")
+        val executor = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt")
         assertTrue(executor.exists())
         assertTrue(executor.readText().contains("import android.content.Intent"))
     }

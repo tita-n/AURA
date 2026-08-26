@@ -1,4 +1,5 @@
 package com.aura.library
+import com.aura.TestPaths
 
 import org.junit.Assert.*
 import org.junit.Test
@@ -7,7 +8,7 @@ import java.io.File
 class AppLibraryAccessibilityTest {
 
     private fun screenText(): String {
-        val f = File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui/library/AppLibraryScreen.kt")
+        val f = TestPaths.find("app/src/main/kotlin/com/aura/ui/library/AppLibraryScreen.kt")
         val alt = File("app/src/main/kotlin/com/aura/ui/library/AppLibraryScreen.kt")
         return (if (f.exists()) f else alt).readText()
     }

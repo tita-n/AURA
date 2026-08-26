@@ -1,4 +1,5 @@
 package com.aura.resolver.l3
+import com.aura.TestPaths
 
 import com.aura.domain.AuraAction
 import com.aura.domain.ResolutionOutcome
@@ -22,7 +23,7 @@ class EndToEndTest {
         val validated = L3Validator(index).validate((out as ResolutionOutcome.Act).result)
         assertTrue(validated is L3ValidationResult.Validated)
         // Executor would need ValidatedAction, not just Act
-        val executorText = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").readText()
+        val executorText = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").readText()
         assertTrue(executorText.contains("ValidatedAction"))
     }
 
@@ -112,7 +113,7 @@ class EndToEndTest {
     }
 
     @Test fun `executionResult domain safe no Android types`() {
-        val file = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt")
+        val file = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt")
         val text = file.readText()
         // ExecutionResult should not contain Intent, PackageManager inside its definition (it does contain those in executor, but result itself is pure)
         val resultSection = text.substringAfter("sealed interface ExecutionResult").substringBefore("interface ActionExecutor")

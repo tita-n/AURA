@@ -1,4 +1,5 @@
 package com.aura.resolver
+import com.aura.TestPaths
 
 import com.aura.domain.*
 import org.junit.Assert.*
@@ -130,7 +131,7 @@ class ContactIndexTest {
     @Test fun `denied permission means empty contact source - provider contract`() {
         // Provider contract: no permission -> empty list, never fake error.
         // Structural check on the provider source.
-        val src = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidContactIndexProvider.kt").readText()
+        val src = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidContactIndexProvider.kt").readText()
         assertTrue(src.contains("if (!hasContactsPermission()) return emptyList()"))
     }
 
@@ -167,7 +168,7 @@ class ContactIndexTest {
     // ---- PRIVACY ----
 
     @Test fun `no contact data logging in platform providers`() {
-        val provider = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidContactIndexProvider.kt").readText()
+        val provider = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidContactIndexProvider.kt").readText()
         assertFalse(provider.contains("Log."))          // no android.util.Log at all in contact path
         assertFalse(provider.contains("println"))        // no stdout leaks
         assertFalse(provider.contains("http"))           // no network
@@ -175,9 +176,9 @@ class ContactIndexTest {
 
     @Test fun `ContactsContract only imported inside platform`() {
         val dirs = listOf(
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain"),
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/resolver"),
-            File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui")
+            TestPaths.find("app/src/main/kotlin/com/aura/domain"),
+            TestPaths.find("app/src/main/kotlin/com/aura/resolver"),
+            TestPaths.find("app/src/main/kotlin/com/aura/ui")
         )
         dirs.forEach { d ->
             d.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
@@ -186,7 +187,7 @@ class ContactIndexTest {
             }
         }
         // Platform provider does import it
-        val p = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidContactIndexProvider.kt").readText()
+        val p = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidContactIndexProvider.kt").readText()
         assertTrue(p.contains("import android.provider.ContactsContract"))
     }
 

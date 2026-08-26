@@ -1,4 +1,5 @@
 package com.aura.resolver
+import com.aura.TestPaths
 
 import org.junit.Assert.*
 import org.junit.Test
@@ -15,7 +16,7 @@ class L0ArchitectureTest {
 
     @Test
     fun `domain does not import Android APIs`() {
-        val domainDir = File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain")
+        val domainDir = TestPaths.find("app/src/main/kotlin/com/aura/domain")
         domainDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val text = f.readText()
             assertFalse("${f.name} must not import PackageManager", text.contains("import android.content.pm.PackageManager"))
@@ -28,7 +29,7 @@ class L0ArchitectureTest {
 
     @Test
     fun `resolver does not import Android APIs`() {
-        val resolverDir = File("/home/titan/AURA/app/src/main/kotlin/com/aura/resolver")
+        val resolverDir = TestPaths.find("app/src/main/kotlin/com/aura/resolver")
         resolverDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val text = f.readText()
             assertFalse("${f.name} must not import PackageManager", text.contains("import android.content.pm.PackageManager"))
@@ -40,7 +41,7 @@ class L0ArchitectureTest {
 
     @Test
     fun `ui does not directly call Android execution APIs`() {
-        val uiDir = File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui")
+        val uiDir = TestPaths.find("app/src/main/kotlin/com/aura/ui")
         uiDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val text = f.readText()
             assertFalse("${f.name} must not import PackageManager", text.contains("import android.content.pm.PackageManager"))
@@ -62,7 +63,7 @@ class L0ArchitectureTest {
             File("app/$relative"),
             File(System.getProperty("user.dir"), relative),
             File(System.getProperty("user.dir"), "app/$relative"),
-            File("/home/titan/AURA/$relative")
+            TestPaths.find("$relative")
         )
         return candidates.firstOrNull { it.exists() } ?: candidates.first()
     }
@@ -73,7 +74,7 @@ class L0ArchitectureTest {
         assertTrue(platformFile.exists())
         assertTrue(platformFile.readText().contains("PackageManager"))
         // Ensure domain/resolver don't (check imports only)
-        val domainHasPM = File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain").walkTopDown()
+        val domainHasPM = TestPaths.find("app/src/main/kotlin/com/aura/domain").walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .any { it.readText().contains("import android.content.pm.PackageManager") }
         assertFalse(domainHasPM)

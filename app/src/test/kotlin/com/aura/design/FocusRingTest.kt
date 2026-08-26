@@ -1,4 +1,5 @@
 package com.aura.design
+import com.aura.TestPaths
 
 import org.junit.Assert.*
 import org.junit.Test
@@ -7,7 +8,7 @@ import java.io.File
 class FocusRingTest {
 
     private fun focusText(): String {
-        val f = File("/home/titan/AURA/app/src/main/kotlin/com/aura/design/AuraFocus.kt")
+        val f = TestPaths.find("app/src/main/kotlin/com/aura/design/AuraFocus.kt")
         val alt = File("app/src/main/kotlin/com/aura/design/AuraFocus.kt")
         return (if (f.exists()) f else alt).readText()
     }

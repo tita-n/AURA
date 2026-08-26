@@ -1,4 +1,5 @@
 package com.aura.resolver
+import com.aura.TestPaths
 
 import com.aura.domain.*
 import org.junit.Assert.*
@@ -101,7 +102,7 @@ class AppIndexTest {
     }
 
     @Test fun `11 resolver package contains no Android imports`() {
-        val dir = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/resolver")
+        val dir = TestPaths.find("app/src/main/kotlin/com/aura/resolver")
         dir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val text = f.readText()
             assertFalse("${f.name} must not import android", text.contains("import android."))
@@ -109,7 +110,7 @@ class AppIndexTest {
     }
 
     @Test fun `12 domain package contains no Android imports`() {
-        val dir = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain")
+        val dir = TestPaths.find("app/src/main/kotlin/com/aura/domain")
         dir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val text = f.readText()
             assertFalse(text.contains("import android."))
@@ -117,7 +118,7 @@ class AppIndexTest {
     }
 
     @Test fun `13 UI contains no PackageManager Intent execution`() {
-        val dir = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/ui")
+        val dir = TestPaths.find("app/src/main/kotlin/com/aura/ui")
         dir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val text = f.readText()
             assertFalse(text.contains("import android.content.pm"))
@@ -125,7 +126,7 @@ class AppIndexTest {
             assertFalse(text.contains("import android.content.Intent"))
         }
         // MainActivity must not import Android execution APIs (providers are platform-side)
-        val main = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/MainActivity.kt").readText()
+        val main = TestPaths.find("app/src/main/kotlin/com/aura/MainActivity.kt").readText()
         assertFalse(main.contains("import android.content.pm"))
         assertFalse(main.contains("startActivity"))
         assertTrue(main.contains("AndroidAppIndexProvider"))

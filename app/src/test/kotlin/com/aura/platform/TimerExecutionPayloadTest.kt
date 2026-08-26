@@ -1,4 +1,5 @@
 package com.aura.platform
+import com.aura.TestPaths
 
 import com.aura.domain.AuraAction
 import com.aura.domain.ResolvedResult
@@ -31,7 +32,7 @@ class TimerExecutionPayloadTest {
         val action = (v as com.aura.resolver.l3.L3ValidationResult.Validated).action.result.action as AuraAction.SetTimer
         assertEquals(10, action.durationSeconds)
         // Verify executor uses ACTION_SET_TIMER with EXTRA_LENGTH = seconds (not millis)
-        val execText = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").takeIf { it.exists() }?.readText()
+        val execText = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").takeIf { it.exists() }?.readText()
             ?: java.io.File("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").readText()
         assertTrue(execText.contains("AlarmClock.ACTION_SET_TIMER"))
         assertTrue(execText.contains("AlarmClock.EXTRA_LENGTH"))
@@ -52,7 +53,7 @@ class TimerExecutionPayloadTest {
         // Must be 600, not 60000 (millis) and not 10 (minutes) — check no *1000 or /60 confusion
         assertNotEquals(60000, action.durationSeconds)
         assertNotEquals(10, action.durationSeconds)
-        val execText = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").takeIf { it.exists() }?.readText()
+        val execText = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").takeIf { it.exists() }?.readText()
             ?: java.io.File("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").readText()
         // Executor must put EXTRA_LENGTH as secs directly
         assertTrue(execText.contains("putExtra(AlarmClock.EXTRA_LENGTH, secs)"))
@@ -88,7 +89,7 @@ class TimerExecutionPayloadTest {
     @Test fun `timer intent uses seconds extra, not millis, and correct action`() {
         val seconds = 600
         // Verify via executor source that correct extras are used
-        val execText = java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").takeIf { it.exists() }?.readText()
+        val execText = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").takeIf { it.exists() }?.readText()
             ?: java.io.File("app/src/main/kotlin/com/aura/platform/android/AndroidActionExecutor.kt").readText()
         assertTrue(execText.contains("AlarmClock.ACTION_SET_TIMER"))
         assertTrue(execText.contains("AlarmClock.EXTRA_LENGTH"))
@@ -106,7 +107,7 @@ class TimerExecutionPayloadTest {
     @Test fun `timer failure does not create new CommandState`() {
         // CommandState is sealed with exactly Idle/Act/Ask/Empty/Error — no TimerSuccess variant.
         val candidates = listOf(
-            java.io.File("/home/titan/AURA/app/src/main/kotlin/com/aura/domain/CommandState.kt"),
+            TestPaths.find("app/src/main/kotlin/com/aura/domain/CommandState.kt"),
             java.io.File("app/src/main/kotlin/com/aura/domain/CommandState.kt")
         )
         val file = candidates.firstOrNull { it.exists() } ?: error("CommandState.kt not found")

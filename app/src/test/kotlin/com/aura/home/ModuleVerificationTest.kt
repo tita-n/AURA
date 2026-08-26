@@ -1,4 +1,5 @@
 package com.aura.home
+import com.aura.TestPaths
 
 import org.junit.Assert.*
 import org.junit.Test
@@ -7,7 +8,7 @@ import java.io.File
 class ModuleVerificationTest {
 
     private fun read(path: String): String {
-        val f = File("/home/titan/AURA/$path")
+        val f = TestPaths.find("$path")
         val alt = File(path)
         return (if (f.exists()) f else alt).readText()
     }

@@ -1,4 +1,5 @@
 package com.aura.notifications
+import com.aura.TestPaths
 
 import org.junit.Assert.*
 import org.junit.Test
@@ -21,7 +22,7 @@ class NotificationRemovalAuditTest {
         val candidates = listOf(
             File(System.getProperty("user.dir")),
             File(System.getProperty("user.dir"), ".."),
-            File("/home/titan/AURA"),
+            TestPaths.find(""),
             File(".")
         )
         for (c in candidates) {
@@ -105,7 +106,7 @@ class NotificationRemovalAuditTest {
 
     @Test fun `no BIND_NOTIFICATION_LISTENER_SERVICE in manifest`() {
         // Check manifest directly
-        val manifest = File("/home/titan/AURA/app/src/main/AndroidManifest.xml")
+        val manifest = TestPaths.find("app/src/main/AndroidManifest.xml")
         if (!manifest.exists()) {
             // Fallback: locate via sourceRoot
             val root = sourceRoot()
@@ -119,7 +120,7 @@ class NotificationRemovalAuditTest {
     }
 
     @Test fun `no notification history or grouping files exist`() {
-        val root = File("/home/titan/AURA")
+        val root = TestPaths.find("")
         val forbiddenFiles = listOf(
             "app/src/main/kotlin/com/aura/domain/Notifications.kt",
             "app/src/main/kotlin/com/aura/platform/android/AuraNotificationListenerService.kt",
@@ -134,7 +135,7 @@ class NotificationRemovalAuditTest {
     }
 
     @Test fun `notification interception docs only describe rejection`() {
-        val doc = File("/home/titan/AURA/docs/PRODUCT.md")
+        val doc = TestPaths.find("docs/PRODUCT.md")
         assertTrue("docs/PRODUCT.md must exist and describe rejection", doc.exists())
         val text = doc.readText()
         assertTrue(text.contains("REJECTED"))

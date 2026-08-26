@@ -1,4 +1,5 @@
 package com.aura.home
+import com.aura.TestPaths
 
 import org.junit.Assert.*
 import org.junit.Test
@@ -7,13 +8,13 @@ import java.io.File
 class WidgetHardeningTest {
 
     private fun hostText(): String {
-        val f = File("/home/titan/AURA/app/src/main/kotlin/com/aura/platform/android/AuraWidgetHost.kt")
+        val f = TestPaths.find("app/src/main/kotlin/com/aura/platform/android/AuraWidgetHost.kt")
         val alt = File("app/src/main/kotlin/com/aura/platform/android/AuraWidgetHost.kt")
         return (if (f.exists()) f else alt).readText()
     }
 
     private fun mainText(): String {
-        val f = File("/home/titan/AURA/app/src/main/kotlin/com/aura/MainActivity.kt")
+        val f = TestPaths.find("app/src/main/kotlin/com/aura/MainActivity.kt")
         val alt = File("app/src/main/kotlin/com/aura/MainActivity.kt")
         return (if (f.exists()) f else alt).readText()
     }

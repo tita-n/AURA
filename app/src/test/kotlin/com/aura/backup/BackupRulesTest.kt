@@ -1,4 +1,5 @@
 package com.aura.backup
+import com.aura.TestPaths
 
 import org.junit.Assert.*
 import org.junit.Test
@@ -8,7 +9,7 @@ class BackupRulesTest {
 
     private fun manifestText(): String {
         val candidates = listOf(
-            File("/home/titan/AURA/app/src/main/AndroidManifest.xml"),
+            TestPaths.find("app/src/main/AndroidManifest.xml"),
             File("app/src/main/AndroidManifest.xml")
         )
         val f = candidates.firstOrNull { it.exists() } ?: error("AndroidManifest.xml not found")
@@ -16,7 +17,7 @@ class BackupRulesTest {
     }
 
     private fun backupRulesText(): String {
-        val f = File("/home/titan/AURA/app/src/main/res/xml/backup_rules.xml")
+        val f = TestPaths.find("app/src/main/res/xml/backup_rules.xml")
         val alt = File("app/src/main/res/xml/backup_rules.xml")
         val file = if (f.exists()) f else alt
         assertTrue("backup_rules.xml must exist", file.exists())
@@ -24,7 +25,7 @@ class BackupRulesTest {
     }
 
     private fun dataExtractionText(): String {
-        val f = File("/home/titan/AURA/app/src/main/res/xml/data_extraction_rules.xml")
+        val f = TestPaths.find("app/src/main/res/xml/data_extraction_rules.xml")
         val alt = File("app/src/main/res/xml/data_extraction_rules.xml")
         val file = if (f.exists()) f else alt
         assertTrue("data_extraction_rules.xml must exist", file.exists())
