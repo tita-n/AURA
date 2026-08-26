@@ -140,6 +140,16 @@ class MainActivity : ComponentActivity() {
                 onDispose { context.unregisterReceiver(receiver) }
             }
 
+            // API 27+: also listen to WallpaperManager color changes. More reliable than the
+            // broadcast on some OEMs (the system can recolor without sending the broadcast).
+            DisposableEffect(this@MainActivity.lifecycle, wallpaperEnabled) {
+                if (!wallpaperEnabled || Build.VERSION.SDK_INT < 27) return@DisposableEffect onDispose {}
+                val wm = android.app.WallpaperManager.getInstance(context)
+                val listener = android.app.WallpaperManager.OnColorsChangedListener { _, _ -> refreshWallpaperTreatment() }
+                wm.addOnColorsChangedListener(listener, android.os.Handler(android.os.Looper.getMainLooper()))
+                onDispose { wm.removeOnColorsChangedListener(listener) }
+            }
+
             DisposableEffect(this@MainActivity.lifecycle) {
                 val obs = LifecycleEventObserver { _, e ->
                     if (e == Lifecycle.Event.ON_RESUME && wallpaperEnabled) refreshWallpaperTreatment()
@@ -215,7 +225,23 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            fun showWidgetToast(msg: String) {
+                try { android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show() }
+                catch (_: Exception) {}
+            }
+
             fun addWidgetFlow(provider: android.appwidget.AppWidgetProviderInfo) {
+                // AURA allows exactly one third-party widget — no widget wall.
+                if (!WidgetLogic.canAdd(homeSettings.widgetIds)) {
+                    showWidgetToast("AURA supports one widget")
+                    return
+                }
+                // Reject widgets whose minimum size exceeds AURA's allowed area.
+                val (maxW, maxH) = widgetHost.maxAllowedAreaDp()
+                if (!WidgetLogic.isProviderAcceptable(provider.minWidth, provider.minHeight, maxW, maxH)) {
+                    showWidgetToast("Widget too large for AURA")
+                    return
+                }
                 val id = widgetHost.allocateId()
                 if (id == android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID) return
                 val bound = widgetHost.bindIfAllowed(id, provider.provider)
@@ -251,14 +277,19 @@ class MainActivity : ComponentActivity() {
 
             // ---- Music ----
             val musicMonitor = remember(context) { MusicMonitor(context.applicationContext) }
-            val musicPlaying by musicMonitor.playing.collectAsState()
+            val musicState by musicMonitor.state.collectAsState()
+            val musicPlaying = musicState is com.aura.home.MusicState.Playing
             DisposableEffect(activityLifecycle) {
                 val obs = LifecycleEventObserver { _, e ->
                     if (e == Lifecycle.Event.ON_RESUME) musicMonitor.refresh()
                 }
                 activityLifecycle.addObserver(obs)
+                musicMonitor.start()
                 musicMonitor.refresh()
-                onDispose { activityLifecycle.removeObserver(obs) }
+                onDispose {
+                    musicMonitor.stop()
+                    activityLifecycle.removeObserver(obs)
+                }
             }
 
             // ---- Calendar / Next Event ----
@@ -551,7 +582,9 @@ class MainActivity : ComponentActivity() {
                                 if (!calendarGranted) calendarPermissionLauncher.launch(NextEventProvider.PERMISSION)
                             },
                             battery = batteryState,
+                            music = musicState,
                             musicPlaying = musicPlaying,
+                            reducedMotion = reducedMotion,
                             onMusicPlayPause = { musicMonitor.playPause(); scope.launch { kotlinx.coroutines.delay(350); musicMonitor.refresh() } },
                             onMusicNext = { musicMonitor.next(); scope.launch { kotlinx.coroutines.delay(350); musicMonitor.refresh() } },
                             onMusicPrev = { musicMonitor.prev(); scope.launch { kotlinx.coroutines.delay(350); musicMonitor.refresh() } },
@@ -594,7 +627,8 @@ class MainActivity : ComponentActivity() {
                             AppLibraryScreen(
                                 apps = currentIndexState.value.allEntities(),
                                 onLaunch = { result -> showLibrary = false; executeValidated(result) },
-                                onClose = { showLibrary = false }
+                                onClose = { showLibrary = false },
+                                wallpaperEnabled = homeSettings.customization.showWallpaper
                             )
                         }
 

@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,6 +40,7 @@ fun AppLibraryScreen(
     apps: List<IndexedEntity>,
     onLaunch: (ResolvedResult) -> Unit,
     onClose: () -> Unit,
+    wallpaperEnabled: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val colors = AuraTheme.colors
@@ -55,12 +57,23 @@ fun AppLibraryScreen(
     val haptics = LocalHapticFeedback.current
     val listState = rememberLazyListState()
 
-    // Jump to section when a rail letter is picked
+    // Active rail letter, coupled to the actual scroll position (not faked).
+    // firstVisibleItemIndex includes the search header, so offset by HEADER_OFFSET.
+    val activeIndex by remember {
+        derivedStateOf {
+            AppLibraryRail.activeSectionIndex(
+                sections,
+                (listState.firstVisibleItemIndex - AppLibraryRail.HEADER_OFFSET).coerceAtLeast(0)
+            )
+        }
+    }
+    val activeLetter = rail.getOrNull(activeIndex)?.letter
+
+    // Jump to section when a rail letter is picked (nearest available if missing).
     LaunchedEffect(pendingScrollLetter, sections) {
         pendingScrollLetter?.let { letter ->
-            sections.firstOrNull { it.letter == letter }?.let { section ->
-                listState.scrollToItem(section.startIndex + 1) // +1 skips search header item
-            }
+            val target = AppLibraryRail.targetIndexForLetter(sections, letter)
+            if (target != null) listState.scrollToItem(AppLibraryRail.listScrollIndex(target))
             pendingScrollLetter = null
         }
     }
@@ -68,7 +81,9 @@ fun AppLibraryScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.surfaceBase)
+            // Dark, calm, translucent AURA surface over the wallpaper — not a separate
+            // bright application screen. Opaque only when wallpaper is off.
+            .background(colors.surfaceBase.copy(alpha = if (wallpaperEnabled) 0.92f else 1f))
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(horizontal = AuraTheme.spacing.screenEdge)
@@ -158,19 +173,31 @@ fun AppLibraryScreen(
                 ) {
                     rail.forEach { section ->
                         val isHash = section.letter == "#"
+                        val isActive = section.letter == activeLetter
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(CircleShape)
+                                .background(
+                                    if (isActive) colors.textPrimary.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent
+                                )
                                 .clickable(
                                     role = Role.Button,
                                     onClickLabel = if (isHash) "Jump to symbols" else "Jump to ${section.letter}"
                                 ) { pendingScrollLetter = section.letter }
                                 .auraFocusRing()
-                                .semantics { contentDescription = if (isHash) "Symbols" else section.letter },
+                                .semantics {
+                                    contentDescription = if (isHash) "Symbols" else section.letter
+                                    // TalkBack announces the currently visible section.
+                                    selected = isActive
+                                },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(section.letter, style = typography.caption, color = colors.textSecondary)
+                            Text(
+                                section.letter,
+                                style = typography.caption,
+                                color = if (isActive) colors.textPrimary else colors.textSecondary
+                            )
                         }
                     }
                 }

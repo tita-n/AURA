@@ -115,16 +115,19 @@ class HomeCodecsTest {
     }
 
     @Test fun `presence greeting contract`() {
-        assertEquals("Good morning", Presence.greetingFor(8))
-        assertEquals("Good afternoon", Presence.greetingFor(13))
-        assertEquals("Good evening", Presence.greetingFor(19))
-        assertNull(Presence.greetingFor(3))
-        assertNull(Presence.greetingFor(23))
-        assertNull(Presence.greetingFor(0))
+        // Deterministic local-time greeting — always a value, keyed on the hour.
+        assertEquals("Good night", Presence.greetingFor(0))
+        assertEquals("Good night", Presence.greetingFor(3))
         assertEquals("Good morning", Presence.greetingFor(5))
+        assertEquals("Good morning", Presence.greetingFor(8))
         assertEquals("Good morning", Presence.greetingFor(11))
         assertEquals("Good afternoon", Presence.greetingFor(12))
+        assertEquals("Good afternoon", Presence.greetingFor(13))
+        assertEquals("Good afternoon", Presence.greetingFor(16))
+        assertEquals("Good evening", Presence.greetingFor(17))
+        assertEquals("Good evening", Presence.greetingFor(19))
         assertEquals("Good evening", Presence.greetingFor(22))
+        assertEquals("Good evening", Presence.greetingFor(23))
     }
 
     @Test fun `full HomeSettings survives encode then decode`() {

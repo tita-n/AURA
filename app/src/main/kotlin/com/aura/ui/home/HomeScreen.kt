@@ -8,6 +8,14 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -35,6 +43,8 @@ import com.aura.domain.*
 import com.aura.home.BatteryUiModel
 import com.aura.home.DockItem
 import com.aura.home.HomeModuleType
+import com.aura.home.ModuleRelevance
+import com.aura.home.MusicState
 import com.aura.home.NextEventInfo
 import com.aura.home.Presence
 import com.aura.home.WallpaperBrightness
@@ -89,6 +99,7 @@ fun HomeScreen(
     nextEventPermissionDenied: Boolean = false,
     onRequestNextEventPermission: () -> Unit = {},
     battery: BatteryUiModel? = null,
+    music: MusicState? = null,
     musicPlaying: Boolean = false,
     onMusicPlayPause: () -> Unit = {},
     onMusicNext: () -> Unit = {},
@@ -97,6 +108,7 @@ fun HomeScreen(
     widgetContent: @Composable (Int) -> Unit = {},
     wallpaperEnabled: Boolean = false,
     wallpaperTreatment: WallpaperTreatment? = null,
+    reducedMotion: Boolean = false,
     onOpenEdit: () -> Unit = {}
 ) {
     val colors = AuraTheme.colors
@@ -166,8 +178,21 @@ fun HomeScreen(
                 )
             }
 
+            // Contextual modules: enabled by the user, but only *visible* when relevant
+            // right now (event soon / low battery or charging / music playing). Home stays
+            // empty otherwise. Relevance is pure (ModuleRelevance) — see PRODUCT.md.
+            val moduleContext = remember(nowMillis, nextEvent, battery, musicPlaying) {
+                ModuleRelevance.ModuleContext(nowMillis, nextEvent, battery, musicPlaying)
+            }
+            val visibleModules = modules.filter { ModuleRelevance.isRelevant(it, moduleContext) }
+
+            val moduleEnter: EnterTransition =
+                if (reducedMotion) EnterTransition.None else fadeIn(tween(160)) + slideInVertically { it / 10 }
+            val moduleExit: ExitTransition =
+                if (reducedMotion) ExitTransition.None else fadeOut(tween(160)) + slideOutVertically { it / 10 }
+
             // Optional native modules — scrollable if present + widgets
-            val hasExtras = modules.isNotEmpty() || widgetIds.isNotEmpty()
+            val hasExtras = visibleModules.isNotEmpty() || widgetIds.isNotEmpty()
             if (hasExtras) {
                 Spacer(Modifier.height(16.dp))
                 val listModifier = Modifier
@@ -183,21 +208,27 @@ fun HomeScreen(
                     modifier = listModifier,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // Native modules in persisted order
+                    // Native modules in persisted order; each calmly enters/leaves by relevance.
                     items(modules, key = { "mod:${it.name}" }) { mod ->
-                        when (mod) {
-                            HomeModuleType.NextEvent -> NextEventRow(
-                                event = nextEvent,
-                                denied = nextEventPermissionDenied,
-                                onRequestPermission = onRequestNextEventPermission
-                            )
-                            HomeModuleType.Battery -> BatteryRow(battery = battery)
-                            HomeModuleType.Music -> MusicRow(
-                                playing = musicPlaying,
-                                onPlayPause = onMusicPlayPause,
-                                onNext = onMusicNext,
-                                onPrev = onMusicPrev
-                            )
+                        AnimatedVisibility(
+                            visible = mod in visibleModules,
+                            enter = moduleEnter,
+                            exit = moduleExit
+                        ) {
+                            when (mod) {
+                                HomeModuleType.NextEvent -> NextEventRow(
+                                    event = nextEvent,
+                                    denied = nextEventPermissionDenied,
+                                    onRequestPermission = onRequestNextEventPermission
+                                )
+                                HomeModuleType.Battery -> BatteryRow(battery = battery)
+                                HomeModuleType.Music -> MusicRow(
+                                    music = music,
+                                    onPlayPause = onMusicPlayPause,
+                                    onNext = onMusicNext,
+                                    onPrev = onMusicPrev
+                                )
+                            }
                         }
                     }
                     // Widget slots (AndroidView per id, stable key)
@@ -413,28 +444,43 @@ private fun BatteryRow(battery: BatteryUiModel?) {
 
 @Composable
 private fun MusicRow(
-    playing: Boolean,
+    music: MusicState?,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrev: () -> Unit
 ) {
     val colors = AuraTheme.colors
     val typography = AuraTheme.typography
+    val isPlaying = music is MusicState.Playing
+    // No fabricated metadata: title/artist only when Android legitimately exposes them.
+    val title = (music as? MusicState.Playing)?.title
+        ?: (music as? MusicState.Paused)?.title
+    val label = title?.takeIf { it.isNotBlank() } ?: if (isPlaying) "Playing" else "Paused"
+    val sub = (music as? MusicState.Playing)?.artist
+        ?: (music as? MusicState.Paused)?.artist
+    val glyph = if (isPlaying) "♪" else "𝄞"
     Row(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(AuraTheme.radius.small))
             .background(colors.surfaceRaised)
             .border(1.dp, colors.borderSubtle, RoundedCornerShape(AuraTheme.radius.small))
-            .padding(AuraTheme.spacing.componentPadding),
+            .padding(AuraTheme.spacing.componentPadding)
+            .semantics(mergeDescendants = true) { contentDescription = "Music: $label" },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(Modifier.size(40.dp).clip(CircleShape).background(colors.surfaceBase), contentAlignment = Alignment.Center) {
-            Text(if (playing) "♪" else "𝄞", style = typography.caption)
+            Text(glyph, style = typography.caption)
         }
-        Text(if (playing) "Playing" else "Paused", style = typography.body, color = colors.textPrimary, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = typography.body, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub != null) {
+                Text(sub, style = typography.caption, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
         AuraChip(variant = ChipVariant.Secondary("◀"), onClick = onPrev)
-        AuraChip(variant = ChipVariant.Action(if (playing) "❚❚" else "▶"), onClick = onPlayPause)
+        // Button reflects ACTUAL state: pause while playing, play while paused.
+        AuraChip(variant = ChipVariant.Action(if (isPlaying) "❚❚" else "▶"), onClick = onPlayPause)
         AuraChip(variant = ChipVariant.Secondary("▶"), onClick = onNext)
     }
 }

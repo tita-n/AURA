@@ -66,12 +66,44 @@ data class HomeSettings(
 data class BatteryUiModel(val percent: Int, val charging: Boolean)
 data class NextEventInfo(val title: String, val beginMillis: Long, val endMillis: Long, val allDay: Boolean)
 
-/** Time-of-day presence greeting. Silence (null) is valid — late night stays quiet. */
+/**
+ * Music module state — pure, Android-free so UI and tests can use it directly.
+ *
+ * AURA has explicitly rejected the notification-listener service, so track metadata is NOT
+ * fabricated. When Android legitimately exposes it (e.g. an accessible media session)
+ * we show it; otherwise we honestly report Playing/Paused with no title.
+ */
+sealed interface MusicState {
+    data object Hidden : MusicState            // no active playback
+    data class Playing(val title: String?, val artist: String?) : MusicState
+    data class Paused(val title: String?, val artist: String?) : MusicState
+    data object Unavailable : MusicState      // monitor cannot access media
+
+    companion object {
+        /** Pure snapshot mapping from AudioManager-style active flag (no metadata available). */
+        fun fromActive(isMusicActive: Boolean): MusicState =
+            if (isMusicActive) Playing(null, null) else Hidden
+    }
+}
+
+/**
+ * Time-of-day presence greeting, deterministic by local hour.
+ *
+ * Boundaries (local device timezone):
+ *   00:00–04:59 → Good night
+ *   05:00–11:59 → Good morning
+ *   12:00–16:59 → Good afternoon
+ *   17:00–23:59 → Good evening
+ *
+ * The greeting is always non-null and depends only on the hour, so it is correct at
+ * every time and updates naturally as the clock advances (Home already recomputes the
+ * hour every minute via its minute ticker — no polling loop required).
+ */
 object Presence {
-    fun greetingFor(hourOfDay: Int): String? = when (hourOfDay) {
-        in 5..11 -> "Good morning"
-        in 12..17 -> "Good afternoon"
-        in 18..22 -> "Good evening"
-        else -> null
+    fun greetingFor(hourOfDay: Int): String = when {
+        hourOfDay in 0..4 -> "Good night"
+        hourOfDay in 5..11 -> "Good morning"
+        hourOfDay in 12..16 -> "Good afternoon"
+        else -> "Good evening" // 17..23
     }
 }

@@ -15,13 +15,14 @@ class DockLogicTest {
         assertEquals("com.example.a", dock[0].packageName)
     }
 
-    @Test fun `add up to five`() {
+    @Test fun `dock honors MAX of four`() {
+        assertEquals(4, DockLogic.MAX)
         var dock: List<DockItem> = emptyList()
-        repeat(5) { dock = DockLogic.add(dock, "com.p$it") }
-        assertEquals(5, dock.size)
-        // sixth is rejected
+        repeat(4) { dock = DockLogic.add(dock, "com.p$it") }
+        assertEquals(4, dock.size)
+        // fifth is rejected
         val overflow = DockLogic.add(dock, "com.overflow")
-        assertEquals(5, overflow.size)
+        assertEquals(4, overflow.size)
         assertSame(dock, overflow)
     }
 

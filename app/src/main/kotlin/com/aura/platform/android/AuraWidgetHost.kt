@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import com.aura.home.WidgetLogic
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -133,6 +134,23 @@ class AuraWidgetHost(private val context: Context) {
     fun deleteOrphaned(storedIds: List<Int>) {
         val orphans = hostIds().filter { it !in storedIds }
         orphans.forEach { deleteId(it) }
+    }
+
+    /**
+     * AURA's usable Home content area (dp) and the maximum allowed widget footprint:
+     * 90% of available width and 10% of available height. The available area excludes
+     * system insets and the space reserved for the Command Bar + Dock so a widget can
+     * never visually dominate Home.
+     */
+    fun maxAllowedAreaDp(): Pair<Int, Int> {
+        val dm = context.resources.displayMetrics
+        val screenW = (dm.widthPixels / dm.density).toInt()
+        val screenH = (dm.heightPixels / dm.density).toInt()
+        val edge = 16 // AuraTheme.spacing.screenEdge (approx) — horizontal Home padding
+        val availW = (screenW - 2 * edge).coerceAtLeast(0)
+        val reserved = 24 + 48 + 56 + 56 + 32 // status + nav + command bar + dock + gaps
+        val availH = (screenH - reserved).coerceAtLeast(0)
+        return WidgetLogic.maxAllowedWidth(availW) to WidgetLogic.maxAllowedHeight(availH)
     }
 
     /**

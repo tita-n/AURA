@@ -35,10 +35,15 @@ Android handles Android. AURA handles intent.
 | Contextual READ_CONTACTS | ✅ Shipped |
 | Command Bar | ✅ Shipped |
 | Design Language / Direction tokens | ✅ Shipped |
-| Home editing (edit mode) | 🚧 This phase |
-| Dock customization (0–5 apps) | 🚧 This phase |
-| Native modules (Next Event, Battery, Music) | 🚧 This phase |
-| Android widget hosting (AppWidgetHost) | 🚧 This phase |
+| Home editing (edit mode) | ✅ Implemented |
+| Dock customization (0–4 apps) | ✅ Implemented |
+| Native modules (Next Event, Battery, Music) | ✅ Implemented (contextual, optional) |
+| Android widget hosting (AppWidgetHost) | ✅ Implemented (single, size-constrained) |
+| Deterministic local-time greeting | ✅ Implemented |
+| Monochrome app icons (IconProcessor) | ✅ Implemented |
+| App Library A–Z rail + translucent surface | ✅ Implemented |
+| Wallpaper cross-device reliability | ✅ Implemented |
+| Reduced-motion (calm module animation) | ✅ Implemented |
 | Customization (theme, accent, wallpaper entry, animation) | ✅ Implemented |
 | Weather module | ❌ CUT — network-dependent; violates local-first |
 
@@ -74,11 +79,18 @@ Goal: make AURA genuinely pleasant to live with every day. Not smarter — more 
 
 - **Home edit mode**: long-press empty area → minimal AURA-native edit surface
   (add/remove/rearrange modules & widgets, appearance, dock).
-- **Dock customization**: 0–5 installed apps, reorder, remove, tap-to-launch via the
+- **Dock customization**: 0–4 installed apps, reorder, remove, tap-to-launch via the
   existing OpenApp execution path. Duplicates not permitted.
 - **Native modules**: Next Event (calendar, contextual READ_CALENDAR), Battery
   (sticky broadcast, event-driven), Music (media-key transport, permission-free).
-  Weather remains CUT. Modules are optional, removable, local-first, event-driven.
+  Modules are *optional and enabled by the user*, but only *visible when relevant*:
+  Next Event within 1h or ongoing, Battery ≤20% or charging, Music while playing.
+  Relevance is pure and deterministic (see `ModuleRelevance`) — no behavioral inference,
+  no tracking. Weather remains CUT. Modules are removable, local-first, event-driven.
+- **Monochrome icons**: launcher icons are recolored to the single AURA tone via the
+  native adaptive-monochrome layer (API 33+) when present, otherwise an AURA fallback
+  luminance→alpha transform — processed off the main thread and cached. No AI, no
+  edge detection, no per-device tuning.
 - **Third-party widgets**: AppWidgetManager/AppWidgetHost as an advanced optional layer,
   strictly separate from AURA-native modules. No marketplace, no restyling.
 - **Layout model**: fixed regions — Time/Presence, optional module/widget region,
@@ -88,6 +100,11 @@ Goal: make AURA genuinely pleasant to live with every day. Not smarter — more 
   Wallpaper (system picker entry), Animation (Standard/Reduced). Explicitly excluded:
   arbitrary fonts, icon marketplaces, free grids, custom animation editors,
   unrestricted color pickers, theme marketplaces.
+- **App Library**: the A–Z rail is genuinely coupled to scroll position (the active letter
+  follows the list; tapping a missing letter lands on the nearest available section), and the
+  sheet renders as a dark, calm, translucent surface over the wallpaper rather than a separate
+  bright screen. The greeting in the Time/Presence region is a deterministic local-time phrase
+  (Good morning/afternoon/evening/night) — no inference about the user.
 - **Wallpaper model**: AURA shows the **system** wallpaper behind a transparent
   window (`FLAG_SHOW_WALLPAPER`) — it never copies or renders the bitmap itself.
   Readability comes from an **adaptive dark scrim** whose alpha is chosen by the

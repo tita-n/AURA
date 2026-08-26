@@ -64,3 +64,49 @@ object AppLibraryLogic {
     fun railLetters(sections: List<Section>): List<Section> =
         sections.sortedWith(compareBy({ it.letter != "#" }, { it.letter }))
 }
+
+/**
+ * Pure App Library rail ↔ list coupling. Keeps all scroll/position math out of the
+ * Composable so it can be unit-tested independently of LazyListState.
+ *
+ * The list has a non-app header item (search field) at index 0, so a filtered-list
+ * index (section.startIndex) is offset by [HEADER_OFFSET] from the LazyList index.
+ */
+object AppLibraryRail {
+
+    const val HEADER_OFFSET = 1
+
+    /** Index (into [sections]) whose section is currently at/above [filteredVisibleIndex]. */
+    fun activeSectionIndex(sections: List<AppLibraryLogic.Section>, filteredVisibleIndex: Int): Int {
+        if (sections.isEmpty()) return 0
+        var idx = 0
+        for (i in sections.indices) {
+            if (sections[i].startIndex <= filteredVisibleIndex) idx = i else break
+        }
+        return idx
+    }
+
+    /** LazyList index (including header) that should be scrolled to for [sectionIndex]. */
+    fun listScrollIndex(sectionIndex: Int): Int = sectionIndex + HEADER_OFFSET
+
+    /**
+     * Resolve a rail letter to the filtered-list index to scroll to.
+     * Exact match first; otherwise the nearest available section (by letter order),
+     * so missing letters still land somewhere sensible.
+     */
+    fun targetIndexForLetter(sections: List<AppLibraryLogic.Section>, letter: String): Int? {
+        if (sections.isEmpty()) return null
+        sections.firstOrNull { it.letter == letter }?.let { return it.startIndex }
+        val target = letter.firstOrNull()?.uppercaseChar() ?: return sections.first().startIndex
+        val rank: (Char) -> Int = { c -> if (c == '#') 'A'.code - 1 else c.code }
+        val tr = rank(target)
+        var best = sections.first()
+        var bestDist = Int.MAX_VALUE
+        for (s in sections) {
+            val sr = rank(s.letter.firstOrNull() ?: '#')
+            val d = kotlin.math.abs(sr - tr)
+            if (d < bestDist) { bestDist = d; best = s }
+        }
+        return best.startIndex
+    }
+}

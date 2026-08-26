@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.aura.design.AuraTheme
+import com.aura.platform.android.IconProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -38,6 +39,31 @@ object AppIconHelper {
         return try {
             context.packageManager.getApplicationIcon(packageName)
         } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+    }
+
+    /**
+     * Load the app icon off the main thread, recolor it to the monochrome AURA tone
+     * (native adaptive layer when available, AURA fallback otherwise), and return an
+     * [ImageBitmap]. Kept OUTSIDE the Compose tree so the suspend try/catch never wraps
+     * a composable call. Returns null on any failure (caller falls back to initials).
+     */
+    suspend fun loadMonochromeIcon(
+        context: Context,
+        packageName: String,
+        tint: Int
+    ): ImageBitmap? = withContext(Dispatchers.IO) {
+        try {
+            val src = getAppIcon(context, packageName) ?: return@withContext null
+            val mono = IconProcessor.process(context, packageName, src, tint)
+            val bmp = if (mono is android.graphics.drawable.BitmapDrawable) {
+                mono.bitmap
+            } else {
+                mono.toBitmap(width = 96, height = 96)
+            }
+            bmp.asImageBitmap()
+        } catch (_: Exception) {
             null
         }
     }
@@ -59,6 +85,8 @@ fun AppIcon(
     iconSize: Dp = 24.dp
 ) {
     val context = LocalContext.current
+    // Read the monochrome AURA tone in composable scope (CompositionLocal), then pass it in.
+    val tint = AuraTheme.colors.textPrimary.value.toInt()
     var bitmap by remember(packageName) {
         mutableStateOf(AppIconCache.get(packageName))
     }
@@ -71,13 +99,7 @@ fun AppIcon(
             bitmap = cached
             return@LaunchedEffect
         }
-        val bmp = withContext(Dispatchers.IO) {
-            try {
-                val d = AppIconHelper.getAppIcon(context, packageName) ?: return@withContext null
-                val b = d.toBitmap(width = 96, height = 96)
-                b.asImageBitmap()
-            } catch (_: Exception) { null }
-        }
+        val bmp = AppIconHelper.loadMonochromeIcon(context, packageName, tint)
         if (bmp != null) {
             AppIconCache.put(packageName, bmp)
             bitmap = bmp

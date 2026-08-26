@@ -6,7 +6,8 @@ package com.aura.home
  */
 object DockLogic {
 
-    const val MAX = 5
+    /** Product decision: AURA Dock maximum is 4 apps (sparse, balanced). */
+    const val MAX = 4
 
     /** Add a package. Duplicate-safe; silently no-ops at capacity. Returns the same list instance when unchanged. */
     fun add(dock: List<DockItem>, packageName: String): List<DockItem> {

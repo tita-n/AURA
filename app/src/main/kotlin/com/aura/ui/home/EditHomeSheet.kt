@@ -1,6 +1,7 @@
 package com.aura.ui.home
 
 import android.appwidget.AppWidgetProviderInfo
+import com.aura.home.WidgetLogic
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -309,8 +310,19 @@ private fun MainEditContent(
         )
     }
     if (settings.widgetIds.isEmpty()) Text("No widgets.", style = typography.caption, color = colors.textSecondary.copy(alpha = 0.7f))
-    AuraChip(variant = ChipVariant.Action("Add widget"), onClick = onOpenWidgetPicker)
-    Text("Resizing: widgets receive your Home's real size. Reshape is responsive — no drag handles in v0.", style = typography.caption, color = colors.textSecondary.copy(alpha = 0.6f))
+    val canAddWidget = settings.widgetIds.size < WidgetLogic.MAX_WIDGETS
+    AuraChip(
+        variant = ChipVariant.Action("Add widget"),
+        onClick = onOpenWidgetPicker,
+        enabled = canAddWidget
+    )
+    Text(
+        if (canAddWidget)
+            "Resizing: widgets receive your Home's real size. Reshape is responsive — no drag handles in v0."
+        else
+            "AURA supports one widget. Remove the current widget to add another.",
+        style = typography.caption, color = colors.textSecondary.copy(alpha = 0.6f)
+    )
 }
 
 @Composable
