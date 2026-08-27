@@ -1,6 +1,8 @@
 package com.aura.ui.command
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -24,11 +26,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.aura.design.AuraTheme
+import com.aura.design.LocalReducedMotion
 import com.aura.design.auraFocusRing
 
 /**
@@ -90,11 +94,32 @@ fun CommandBar(
                     .focusRequester(focusRequester),
                 decorationBox = { innerTextField ->
                     if (query.isEmpty()) {
-                        Text(
-                            text = placeholder,
-                            style = typography.commandInput,
-                            color = colors.textSecondary.copy(alpha = alpha)
-                        )
+                        // The placeholder is purely instructional decoration (teaching
+                        // examples). It must NOT be read as user-entered text, and its
+                        // rotation must not cause repeated TalkBack announcements, so it
+                        // is hidden from the accessibility tree. The field itself keeps the
+                        // "Command bar" description (see Row semantics above).
+                        val placeholderModifier = Modifier.clearAndSetSemantics { }
+                        if (LocalReducedMotion.current) {
+                            Text(
+                                text = placeholder,
+                                style = typography.commandInput,
+                                color = colors.textSecondary.copy(alpha = alpha),
+                                modifier = placeholderModifier
+                            )
+                        } else {
+                            Crossfade(
+                                targetState = placeholder,
+                                animationSpec = tween(durationMillis = 300),
+                                modifier = placeholderModifier
+                            ) { text ->
+                                Text(
+                                    text = text,
+                                    style = typography.commandInput,
+                                    color = colors.textSecondary.copy(alpha = alpha)
+                                )
+                            }
+                        }
                     }
                     innerTextField()
                 }

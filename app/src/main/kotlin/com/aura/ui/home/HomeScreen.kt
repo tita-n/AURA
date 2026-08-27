@@ -43,6 +43,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import android.graphics.BitmapFactory
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.aura.design.AuraTheme
 import com.aura.design.auraFocusRing
 import com.aura.domain.*
@@ -63,7 +66,11 @@ import com.aura.home.WallpaperTreatmentResolver
 import com.aura.platform.AppIcon
 import com.aura.resolver.IndexedEntity
 import com.aura.ui.command.CommandBar
+import com.aura.ui.command.CommandHint
 import com.aura.ui.command.CommandStateHost
+import com.aura.ui.command.SUPPORTED_COMMAND_EXAMPLES
+import com.aura.ui.command.nextExampleIndex
+import com.aura.ui.command.shouldPauseRotation
 import com.aura.ui.components.AuraChip
 import com.aura.ui.components.ChipVariant
 import java.text.SimpleDateFormat
@@ -129,6 +136,37 @@ fun HomeScreen(
     var internalFocused by remember { mutableStateOf(focused) }
     LaunchedEffect(query) { internalQuery = query }
     LaunchedEffect(focused) { internalFocused = focused }
+
+    // Track Home foreground visibility so the rotating placeholder pauses when the app
+    // is not in the foreground (Part 2). Lifecycle-aware; no polling loop.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var homeInForeground by remember { mutableStateOf(true) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            homeInForeground = when (event) {
+                Lifecycle.Event.ON_RESUME -> true
+                Lifecycle.Event.ON_PAUSE -> false
+                else -> homeInForeground
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Rotating placeholder: advances on a single delayed coroutine while Home is visible,
+    // the bar is empty, and the user is not typing. The LaunchedEffect keys only on those
+    // signals, so ordinary recompositions do not restart or reset it. It never touches
+    // command resolution (Part 12).
+    var exampleIndex by remember { mutableStateOf(0) }
+    val rotatingPlaceholder = SUPPORTED_COMMAND_EXAMPLES[exampleIndex]
+    LaunchedEffect(homeInForeground, internalQuery, internalFocused) {
+        if (shouldPauseRotation(homeInForeground, internalQuery, internalFocused)) return@LaunchedEffect
+        while (true) {
+            delay(4500)
+            exampleIndex = nextExampleIndex(exampleIndex, SUPPORTED_COMMAND_EXAMPLES.size)
+        }
+    }
+
     val nowMillis = rememberMinuteTicker()
     val hourOfDay = remember(nowMillis) { Calendar.getInstance().apply { timeInMillis = nowMillis }.get(Calendar.HOUR_OF_DAY) }
     val effectivePresence = presenceText ?: Presence.greetingFor(hourOfDay)
@@ -311,6 +349,23 @@ fun HomeScreen(
                 )
             }
 
+            // Contextual failed-intent hint: only for inputs that resemble a supported
+            // command but did not resolve. Pure, deterministic, local-only (Phase 4B).
+            val commandHint = remember(internalQuery, commandState) {
+                CommandHint.suggest(internalQuery, commandState)
+            }
+            if (commandHint != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = commandHint,
+                    style = typography.caption,
+                    color = colors.textSecondary.copy(alpha = 0.72f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp)
+                )
+            }
+
             // CommandBar — fixed 56dp, never movable
             CommandBar(
                 query = internalQuery,
@@ -318,6 +373,7 @@ fun HomeScreen(
                 focused = internalFocused,
                 onFocusedChange = { internalFocused = it; onFocusedChange(it) },
                 onClear = { internalQuery = ""; onQueryChange("") },
+                placeholder = rotatingPlaceholder,
                 onSubmit = {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onSubmit()

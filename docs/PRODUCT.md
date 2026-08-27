@@ -87,6 +87,34 @@ and is validated by L3 before execution. No AI, no cloud, no new visual states.
 - Reminders are NEVER claimed as created. AURA opens the calendar editor with the details prefilled.
 - Time/Date are computed from the device clock with an optional offline city→TimeZone table; unknown cities are rejected, never guessed.
 
+## COMMAND BAR DISCOVERABILITY (Phase 4B)
+
+A small UX phase: make existing Command Bar capabilities *discoverable* without changing any
+resolution behavior, execution, or adding new commands. AURA teaches its capabilities through
+examples rather than a dedicated onboarding flow.
+
+**Rotating placeholder**
+- The old generic "Search anything" is replaced by a rotating set of REAL examples drawn from
+  genuinely implemented families: `Call Mum`, `Message Sarah`, `Set a timer for 10 min`,
+  `Calculate 15% of 4000`, `Open Spotify`, `Open Wi-Fi settings`, `What time is it`.
+- Rotates ~4.5s while Home is visible, the bar is empty, and the user is not typing.
+- Pauses on `ON_PAUSE` and resumes on `ON_RESUME` (lifecycle-aware, single delayed coroutine —
+  no per-frame timer, no polling, no resolver calls).
+- Subtle crossfade; reduced-motion swaps text instantly. Uses existing AURA motion/design tokens.
+
+**Accessibility**
+- The rotating placeholder is decorative and hidden from the accessibility tree
+  (`clearAndSetSemantics`), so TalkBack never re-announces it every 4s. The field keeps its
+  "Command bar" description, 48dp target, dynamic font scaling, and RTL.
+
+**Contextual failed-intent hint**
+- Distinct from a normal search miss: if the input strongly resembles a supported command family
+  (call / message / timer) but did not resolve, a small, calm hint appears — e.g.
+  `Try: Message Sarah` for `message Sarah on`, `Try: Call Sarah` for `call Sarah tomorrow`,
+  `Try: Set a timer for 10 min` for `set timer`.
+- Deterministic pattern matching only — no AI, network, or analytics. Random text and ordinary
+  app-name misses produce no hint. The hint disappears on a successful/ambiguous resolution.
+
 ## NOTIFICATION PANEL — REJECTED
 
 **Status: REJECTED as a Panel. A narrow, music-only media listener is OPTIONAL and
