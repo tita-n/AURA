@@ -74,7 +74,7 @@ fun AppLibraryScreen(
     LaunchedEffect(pendingScrollLetter, sections) {
         pendingScrollLetter?.let { letter ->
             val target = AppLibraryRail.targetIndexForLetter(sections, letter)
-            if (target != null) listState.scrollToItem(AppLibraryRail.listScrollIndex(target))
+            if (target != null) listState.animateScrollToItem(AppLibraryRail.listScrollIndex(target))
             pendingScrollLetter = null
         }
     }
@@ -87,6 +87,7 @@ fun AppLibraryScreen(
             .background(colors.surfaceBase.copy(alpha = if (wallpaperEnabled) 0.92f else 1f))
             .statusBarsPadding()
             .navigationBarsPadding()
+            .imePadding()
             .padding(horizontal = AuraTheme.spacing.screenEdge)
     ) {
         Row(

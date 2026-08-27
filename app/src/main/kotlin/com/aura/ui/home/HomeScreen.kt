@@ -166,7 +166,8 @@ fun HomeScreen(
                 .background(if (wallpaperEnabled) androidx.compose.ui.graphics.Color.Transparent else colors.surfaceBase)
                 .padding(horizontal = AuraTheme.spacing.screenEdge)
                 .statusBarsPadding()
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(32.dp))
