@@ -31,7 +31,8 @@ class ContextualSurfaceTest {
         battery: BatteryUiModel? = null,
         batteryEnabled: Boolean = true,
         musicState: MusicState = hidden,
-        musicEnabled: Boolean = true
+        musicEnabled: Boolean = true,
+        musicAccess: Boolean = true
     ) = ContextualEngine.build(
         nowMillis = now,
         nextEvent = nextEvent,
@@ -40,7 +41,8 @@ class ContextualSurfaceTest {
         battery = battery,
         batteryEnabled = batteryEnabled,
         musicState = musicState,
-        musicEnabled = musicEnabled
+        musicEnabled = musicEnabled,
+        musicAccess = musicAccess
     )
 
     @Test fun `nothing relevant yields no surface`() {
@@ -107,6 +109,30 @@ class ContextualSurfaceTest {
 
     @Test fun `music hidden yields no music item`() {
         val items = build(musicState = hidden)
+        assertTrue(items.none { it is MusicContextualItem })
+    }
+
+    @Test fun `music shown when listener access granted and playing`() {
+        val items = build(musicState = playing, musicAccess = true)
+        assertEquals(1, items.count { it is MusicContextualItem })
+    }
+
+    @Test fun `music hidden when listener access not granted even if playing`() {
+        // The optional media-access permission is the only gate; refusing it hides Music
+        // entirely while everything else keeps working.
+        val items = build(musicState = playing, musicEnabled = true, musicAccess = false)
+        assertTrue(items.none { it is MusicContextualItem })
+    }
+
+    @Test fun `revoking listener access hides music gracefully`() {
+        val withAccess = build(musicState = playing, musicEnabled = true, musicAccess = true)
+        assertTrue(withAccess.any { it is MusicContextualItem })
+        val without = build(musicState = playing, musicEnabled = true, musicAccess = false)
+        assertTrue(without.none { it is MusicContextualItem })
+    }
+
+    @Test fun `Unavailable music state is not surfaced`() {
+        val items = build(musicState = MusicState.Unavailable, musicEnabled = true, musicAccess = true)
         assertTrue(items.none { it is MusicContextualItem })
     }
 

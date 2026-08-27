@@ -41,6 +41,7 @@ Android handles Android. AURA handles intent.
 | Android widget hosting (AppWidgetHost) | ✅ Implemented (single, size-constrained) |
 | Deterministic local-time greeting | ✅ Implemented |
 | Monochrome app icons | ❌ Deferred — experiment frozen |
+| Music media access (optional, music-only listener) | ✅ Optional (narrow, user-granted) |
 | App Library A–Z rail + translucent surface | ✅ Implemented |
 | Wallpaper cross-device reliability | ✅ Implemented |
 | Reduced-motion (calm module animation) | ✅ Implemented |
@@ -49,25 +50,45 @@ Android handles Android. AURA handles intent.
 
 ## NOTIFICATION PANEL — REJECTED
 
-**Status: REJECTED. This is an explicit product rejection, not a deferral.
-Notification Phase 1.1 has been removed from the active roadmap and from the codebase.**
+**Status: REJECTED as a Panel. A narrow, music-only media listener is OPTIONAL and
+user-granted. Notification Phase 1.1 (the full panel/history/subsystem) has been removed
+from the active roadmap and from the codebase.**
 
-Reason:
+Reason for rejecting the Panel:
 
 - Android already handles notifications well. Users understand and expect the system shade.
 - AURA must not compete with Android's notification shade, quick settings, or native permission UI.
-- The subsystem added Notification Listener access (privacy risk), battery/OEM risk,
+- A full notification subsystem added listener access (privacy risk), battery/OEM risk,
   background complexity, another UI surface — for little unique product value.
 - AURA's specialization is intent resolution, app discovery, command execution,
   and the Home experience — not notification interception.
 
-Consequences enforced in this repository:
+What is explicitly forbidden (enforced by architecture tests):
 
-- No `NotificationListenerService`, no listener access flow, no notification panel,
-  no notification history, no grouping/priority logic, no notification-specific services.
-- Home has no swipe-down notification zone. Notifications belong to the OS.
-- Any future proposal to re-introduce notification interception requires reversing this
-  document first.
+- No notification panel, no notification history, no grouping/priority logic,
+  no notification-specific UI, no swipe-down notification zone.
+- Notifications belong to the OS. Android owns notifications; AURA owns the
+  contextual Home experience.
+- The listener never reads notification content, never stores or transmits anything,
+  never renders a notification, and never maintains a list.
+
+What IS allowed — the narrow music bridge:
+
+- Exactly ONE `AuraMediaNotificationListenerService`, music-only, declared with
+  `BIND_NOTIFICATION_LISTENER_SERVICE`. Its sole purpose is to act as an *optional*
+  technical bridge so AURA can discover other apps' active media sessions and their
+  structured metadata (title/artist/album/artwork) for the single Music contextual
+  surface.
+- It is granted only when the user explicitly enables it in Android's settings, and
+  only after AURA explains the scope. It is never requested at install, never because
+  AURA became the launcher, and never merely because the Music module was enabled.
+- Track metadata comes from the media session / MediaController, never from the
+  notification body. The listener filters aggressively to media-related notifications
+  and discards everything else immediately.
+- Refusing it leaves Music hidden; everything else works normally.
+
+Any future proposal to broaden notification interception beyond this narrow music
+bridge requires reversing this document first.
 
 ---
 
@@ -94,13 +115,16 @@ Goal: make AURA genuinely pleasant to live with every day. Not smarter — more 
     metadata (`CalendarRelevance`) — AURA does NOT surface generic holidays as if they
     were personal meetings. Heuristic, documented as such; hide rather than clutter.
   - **Battery** is event-driven (sticky broadcast); hidden at healthy charge.
-  - **Music** uses MediaSessionManager / AudioManager (permission-free, **no
-    NotificationListener**). State reflects the real `PlaybackState` (`PlaybackMapper`);
-    track title/artist are shown only when Android legitimately exposes them, otherwise a
-    clean Playing/Paused fallback. Detection is event-driven (ON_RESUME + audio-focus
-    loss / `AUDIO_BECOMING_NOISY`). A third-party launcher without `MEDIA_CONTENT_CONTROL`
-    cannot receive active-session callbacks, so prompt appearance while backgrounded is
-    best-effort and honestly documented — no polling, no notification access.
+  - **Music** uses the Android media APIs. The preferred path is `MediaSessionManager` /
+    `MediaController` for real playback state + metadata (title/artist/album/artwork) and
+    `TransportControls`` for play/pause/skip. A third-party launcher without
+    `MEDIA_CONTENT_CONTROL` cannot enumerate other apps' media sessions directly, so AURA
+    uses a **narrow, user-granted, music-only** `AuraMediaNotificationListenerService`
+    solely as the technical bridge that unlocks `getActiveSessions` + prompt detection.
+    That listener never reads notification content — the media session supplies metadata.
+    If the user does not grant access, Music falls back to an honest Playing/Paused
+    snapshot (no title) via `AudioManager`. State is authoritative Android state; after a
+    transport command we wait for the controller callback rather than mutating locally.
 - **Monochrome icons**: DEFERRED. The previous experimental AURA monochrome
   transformation produced inconsistent results across applications (a dark circular
   background with a dimmed original icon for many apps) and was rejected rather than

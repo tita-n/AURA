@@ -54,6 +54,23 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- AURA Media Notification Listener — MUSIC ONLY, narrow, privacy-preserving.
+             This is NOT a notification subsystem: no list, history, grouping, priority,
+             storage, or rendering. Its sole purpose is to act as an optional technical
+             bridge so AURA can discover other apps' active media sessions + structured
+             metadata for the single Music contextual surface. The system grants the bind
+             permission only when the user explicitly enables it in Android settings.
+             No <uses-permission> is declared; enabling happens via Settings. -->
+        <service
+            android:name="com.aura.platform.android.AuraMediaNotificationListenerService"
+            android:label="AURA Music (media only)"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

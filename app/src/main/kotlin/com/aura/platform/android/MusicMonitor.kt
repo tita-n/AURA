@@ -4,33 +4,55 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Handler
+import android.os.Looper
 import android.view.KeyEvent
+import com.aura.home.MediaArtwork
+import com.aura.home.MediaContext
+import com.aura.home.MediaPlaybackState
+import com.aura.home.MediaSessionSelector
 import com.aura.home.MusicState
-import com.aura.home.PlaybackMapper
+import com.aura.home.toMusicState
+import com.aura.home.capabilitiesFromActions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.ByteArrayOutputStream
 
 /**
- * Music monitor — permission-free, local, event-driven.
+ * Music monitor — discovers other apps' active media sessions and exposes a single
+ * pure [MusicState] for the ONE contextual surface.
  *
- * Strategy (honest, without NotificationListener):
- *  - Best-effort: try [MediaSessionManager.getActiveSessions]. On a normal launcher this
- *    returns empty (it needs MEDIA_CONTENT_CONTROL), but on devices/emulators that allow it
- *    we read real playback state + metadata and drive transport via MediaController.
- *  - Fallback: [AudioManager.isMusicActive] snapshot — tells us whether music is playing,
- *    but not title/artist (that would require notification access, which AURA rejects).
- *  - After a transport command we REFRESH from the actual media state instead of assuming
- *    the command succeeded (no blind state inversion).
+ * Architecture (honest, minimal, event-driven):
+ *  - PREFERRED: when the user has enabled AURA's narrow media listener
+ *    ([AuraMediaNotificationListenerService]), [MediaSessionManager.getActiveSessions]
+ *    returns the active media sessions for that component. For each we build a
+ *    [MediaController], register [MediaController.Callback], and read REAL playback
+ *    state + metadata (title/artist/album/artwork) plus capabilities. The listener also
+ *    forwards media-notification events so appearance is prompt.
+ *  - FALLBACK (no access granted): best-effort [AudioManager.isMusicActive] snapshot
+ *    (Playing/Paused with no metadata — we never fabricate it). Transport via synthetic
+ *    media-key events, the legitimate permission-free path.
+ *  - After a transport command we do NOT mutate UI state; we let the MediaController
+ *    callback (or a single safety refresh on the key path) report the actual state.
  *
- * Metadata is only shown when Android legitimately exposes it. We never fabricate it.
+ * No NotificationListenerService is used to read notification content. The listener is a
+ * narrow bridge; track metadata comes from the media session, never the notification body.
  */
 class MusicMonitor(private val context: Context) {
 
+    companion object {
+        /** Set while a monitor instance is alive so the listener can forward events. */
+        @Volatile var instance: MusicMonitor? = null
+    }
+
+    private val handler = Handler(Looper.getMainLooper())
     private val audioManager: AudioManager =
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val sessionManager: MediaSessionManager =
@@ -39,24 +61,24 @@ class MusicMonitor(private val context: Context) {
     private val _state: MutableStateFlow<MusicState> = MutableStateFlow(MusicState.Hidden)
     val state: StateFlow<MusicState> = _state
 
-    private var controller: MediaController? = null
+    private val controllers = LinkedHashMap<android.media.session.MediaSession.Token, MediaController>()
+    private val contexts = LinkedHashMap<android.media.session.MediaSession.Token, MediaContext>()
+    private var activeToken: android.media.session.MediaSession.Token? = null
+    private var receiver: BroadcastReceiver? = null
+
     private val controllerCallback = object : MediaController.Callback() {
-        override fun onPlaybackStateChanged(state: PlaybackState?) = reconcile()
-        override fun onMetadataChanged(metadata: MediaMetadata?) = reconcile()
+        override fun onPlaybackStateChanged(state: PlaybackState?) = refresh()
+        override fun onMetadataChanged(metadata: MediaMetadata?) = refresh()
         override fun onSessionDestroyed() {
-            controller = null
-            reconcile()
+            // The destroyed controller's token is now invalid; refresh removes it.
+            refresh()
         }
     }
 
-    private var receiver: BroadcastReceiver? = null
-
     @Synchronized
     fun start() {
+        instance = this
         if (receiver != null) return
-        // Playback often stops/pauses when audio becomes noisy (headphones unplugged) —
-        // refresh then to clear a stale playing state. This is the strongest legitimate,
-        // permission-free signal a third-party launcher can use (no NotificationListener).
         val r = object : BroadcastReceiver() {
             override fun onReceive(c: Context?, intent: Intent?) {
                 if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) refresh()
@@ -64,7 +86,7 @@ class MusicMonitor(private val context: Context) {
         }
         context.registerReceiver(r, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
         receiver = r
-        refresh() // populate immediately
+        refresh()
     }
 
     @Synchronized
@@ -73,56 +95,164 @@ class MusicMonitor(private val context: Context) {
             try { context.unregisterReceiver(it) } catch (_: Exception) {}
             receiver = null
         }
-        controller?.unregisterCallback(controllerCallback)
-        controller = null
+        clearControllers()
+        if (instance == this) instance = null
     }
 
-    /** Re-evaluate state from the live media session if available, else AudioManager. */
+    /** Called by the listener when it connects or when a media notification appears/leaves. */
+    @Synchronized
+    fun onListenerConnected() = refresh()
+
+    @Synchronized
+    fun onMediaNotificationPosted() = refresh()
+
+    @Synchronized
     fun refresh() {
-        val sessions = try { sessionManager.getActiveSessions(null) } catch (_: Exception) { emptyList() }
-        if (sessions.isNotEmpty()) {
-            val token = try { sessions.first().sessionToken } catch (_: Exception) { null }
-            if (token != null && controller?.sessionToken != token) {
-                controller?.unregisterCallback(controllerCallback)
-                controller = try { MediaController(context, token) } catch (_: Exception) { null }
-                controller?.registerCallback(controllerCallback)
-            }
-            reconcile()
-        } else {
-            controller?.unregisterCallback(controllerCallback)
-            controller = null
+        if (!NotificationAccess.isListenerEnabled(context)) {
+            // No media access granted: honest fallback, no metadata. Music stays hidden
+            // at the contextual layer until the user opts in (see ContextualEngine.musicAccess).
+            clearControllers()
             _state.value = MusicState.fromActive(audioManager.isMusicActive)
+            return
         }
+        val sessions = try {
+            sessionManager.getActiveSessions(NotificationAccess.listenerComponent(context))
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val liveTokens = sessions.mapNotNull { it.sessionToken }
+        // Drop controllers whose session is gone.
+        controllers.keys.filter { it !in liveTokens }.forEach { removeController(it) }
+        // Add controllers for newly active sessions.
+        sessions.forEach { sc ->
+            val token = sc.sessionToken ?: return@forEach
+            if (!controllers.containsKey(token)) {
+                val c = try { MediaController(context, token) } catch (_: Exception) { null } ?: return@forEach
+                c.registerCallback(controllerCallback)
+                controllers[token] = c
+            }
+        }
+        reconcile()
     }
 
     private fun reconcile() {
-        val c = controller
+        contexts.clear()
+        controllers.forEach { (token, c) -> contexts[token] = buildMediaContext(c) }
+        val best = MediaSessionSelector.best(contexts.values.toList())
+        activeToken = contexts.entries.firstOrNull { it.value == best }?.key
+        _state.value = best?.toMusicState() ?: MusicState.Hidden
+    }
+
+    private fun removeController(token: android.media.session.MediaSession.Token) {
+        controllers[token]?.unregisterCallback(controllerCallback)
+        controllers.remove(token)
+        contexts.remove(token)
+        if (activeToken == token) activeToken = null
+    }
+
+    private fun clearControllers() {
+        controllers.values.forEach { it.unregisterCallback(controllerCallback) }
+        controllers.clear()
+        contexts.clear()
+        activeToken = null
+    }
+
+    private fun activeController(): MediaController? = activeToken?.let { controllers[it] }
+
+    // ---- Transport (actual state is reported by the controller callback) -------
+
+    @Synchronized
+    fun playPause() {
+        val c = activeController()
         if (c != null) {
-            val meta = c.metadata
-            val title = meta?.getString(MediaMetadata.METADATA_KEY_TITLE)
-            val artist = meta?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-            // Pure mapping: only STATE_PLAYING/STATE_P has a visible state; stopped/
-            // buffering/connecting all resolve to Hidden (no stale paused icon).
-            _state.value = PlaybackMapper.derive(c.playbackState?.state, title, artist)
+            // Decide play vs pause from the ACTUAL reported state (not a local guess).
+            if (_state.value is MusicState.Playing) c.transportControls.pause()
+            else c.transportControls.play()
         } else {
-            _state.value = MusicState.fromActive(audioManager.isMusicActive)
+            dispatchKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            refreshSoon()
         }
     }
 
-    private fun transportOrKey(keyCode: Int) {
-        // We observe real playback state via the media session (when available) and refresh
-        // from it after the command. Transport itself goes through synthetic media key events,
-        // which is the permission-free path available to a third-party launcher without
-        // notification-listener service. (A live MediaController is used for *observation* only.)
+    @Synchronized
+    fun next() {
+        activeController()?.transportControls?.skipToNext() ?: run {
+            dispatchKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+            refreshSoon()
+        }
+    }
+
+    @Synchronized
+    fun prev() {
+        activeController()?.transportControls?.skipToPrevious() ?: run {
+            dispatchKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            refreshSoon()
+        }
+    }
+
+    /** Single safety refresh on the key-event path (no controller callback there). */
+    private fun refreshSoon() {
+        handler.postDelayed({ refresh() }, 250)
+    }
+
+    private fun dispatchKey(keyCode: Int) {
         try {
             audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
             audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
         } catch (_: Exception) {}
-        // Refresh from the actual media state rather than assuming the command succeeded.
-        refresh()
     }
 
-    fun playPause() = transportOrKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-    fun next() = transportOrKey(KeyEvent.KEYCODE_MEDIA_NEXT)
-    fun prev() = transportOrKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+    // ---- Pure-bridge extraction (Android -> com.aura.home.MediaContext) --------
+
+    private fun buildMediaContext(controller: MediaController): MediaContext {
+        val md = controller.metadata
+        val ps = controller.playbackState
+        val state = MediaPlaybackState.fromInt(ps?.state)
+        val capabilities = capabilitiesFromActions(ps?.actions ?: 0L)
+        val artwork = md?.let { m ->
+            val bmp = m.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                ?: m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            downsampleArt(bmp)?.let { MediaArtwork(it) }
+        }
+        return MediaContext(
+            packageName = controller.packageName,
+            appLabel = appLabel(controller.packageName),
+            title = md?.getString(MediaMetadata.METADATA_KEY_TITLE),
+            artist = md?.getString(MediaMetadata.METADATA_KEY_ARTIST),
+            album = md?.getString(MediaMetadata.METADATA_KEY_ALBUM),
+            artwork = artwork,
+            playbackState = state,
+            durationMs = md?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.let { if (it < 0) null else it },
+            positionMs = if (state == MediaPlaybackState.PLAYING) ps?.position else null,
+            capabilities = capabilities,
+            lastUpdatedMillis = System.currentTimeMillis()
+        )
+    }
+
+    private fun appLabel(pkg: String?): String? {
+        if (pkg == null) return null
+        return try {
+            val pm = context.packageManager
+            pm.getApplicationInfo(pkg, 0).let { pm.getApplicationLabel(it).toString() }
+        } catch (_: Exception) {
+            pkg.substringAfterLast(".")
+        }
+    }
+
+    /** Downsample artwork once to a small PNG so the UI never decodes a large bitmap. */
+    private fun downsampleArt(bitmap: Bitmap?): ByteArray? {
+        if (bitmap == null) return null
+        return try {
+            val maxPx = 128
+            val scale = (maxPx.toFloat() / maxOf(bitmap.width, bitmap.height)).coerceAtMost(1f)
+            val tw = maxOf(1, (bitmap.width * scale).toInt())
+            val th = maxOf(1, (bitmap.height * scale).toInt())
+            val scaled = Bitmap.createScaledBitmap(bitmap, tw, th, true)
+            val out = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.PNG, 100, out)
+            out.toByteArray()
+        } catch (_: Exception) {
+            null
+        }
+    }
 }

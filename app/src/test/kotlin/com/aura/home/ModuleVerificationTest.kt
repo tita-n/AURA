@@ -75,18 +75,27 @@ class ModuleVerificationTest {
         assertTrue(battery.contains("EXTRA_STATUS") || battery.contains("EXTRA_PLUGGED"))
     }
 
-    // Music
-    @Test fun `Music no NotificationListener`() {
+    // Music — narrow, music-only media-access bridge (NOT a notification panel)
+    @Test fun `Music uses media session with narrow listener bridge`() {
         val main = read("app/src/main/kotlin/com/aura/MainActivity.kt")
         val music = read("app/src/main/kotlin/com/aura/platform/android/MusicMonitor.kt")
-        assertFalse(main.contains("AuraNotificationListenerService"))
+        val listener = read("app/src/main/kotlin/com/aura/platform/android/AuraMediaNotificationListenerService.kt")
+        // Preferred path: real media session / controller.
+        assertTrue(music.contains("MediaSessionManager") && music.contains("getActiveSessions"))
+        assertTrue(music.contains("MediaController"))
+        assertTrue(music.contains("TransportControls") || music.contains("transportControls"))
+        // Narrow listener bridge exists and is music-only.
+        assertTrue(listener.contains("AuraMediaNotificationListenerService"))
+        assertTrue(listener.contains("MediaNotificationFilter") || listener.contains("MediaNotificationSignal"))
+        // No notification body reading anywhere.
+        assertFalse(music.contains("EXTRA_TITLE") || music.contains("EXTRA_TEXT") || music.contains("getCharSequence"))
+        assertFalse(listener.contains("EXTRA_TITLE") || listener.contains("EXTRA_TEXT") || listener.contains("getCharSequence"))
+        // No broad/old notification subsystem.
         assertFalse(music.contains("AuraNotificationListenerService"))
-        assertFalse(music.contains("import android.service.notification.NotificationListenerService"))
-        // Should document limitation honestly
-        assertTrue(music.contains("without NotificationListener") || music.contains("no Notification"))
+        assertFalse(main.contains("AuraNotificationListenerService"))
     }
 
-    @Test fun `Music uses AudioManager and fails gracefully`() {
+    @Test fun `Music uses AudioManager fallback and fails gracefully`() {
         val music = read("app/src/main/kotlin/com/aura/platform/android/MusicMonitor.kt")
         assertTrue(music.contains("AudioManager"))
         assertTrue(music.contains("isMusicActive"))
@@ -94,9 +103,11 @@ class ModuleVerificationTest {
         assertTrue(music.contains("try") && music.contains("catch"))
     }
 
-    @Test fun `Music lifecycle safe via ON_RESUME`() {
+    @Test fun `Music lifecycle safe via ON_RESUME and re-checks access`() {
         val main = read("app/src/main/kotlin/com/aura/MainActivity.kt")
         assertTrue(main.contains("ON_RESUME") && main.contains("musicMonitor"))
+        // Access is re-checked on resume; never prompted at install or by launcher role.
+        assertTrue(main.contains("NotificationAccess.isListenerEnabled"))
     }
 
     @Test fun `modules are optional and default empty`() {

@@ -80,20 +80,35 @@ data class NextEventInfo(
 /**
  * Music module state — pure, Android-free so UI and tests can use it directly.
  *
- * AURA has explicitly rejected the notification-listener service, so track metadata is NOT
- * fabricated. When Android legitimately exposes it (e.g. an accessible media session)
- * we show it; otherwise we honestly report Playing/Paused with no title.
+ * Track metadata is NEVER fabricated. When Android legitimately exposes it via a media
+ * session (structured title/artist/album/artwork), we show it; otherwise we honestly
+ * report Playing/Paused with no title. [appLabel]/[artwork]/[canNext]/[canPrev] default
+ * to neutral values so the key-event fallback path keeps all controls usable.
  */
 sealed interface MusicState {
     data object Hidden : MusicState            // no active playback
-    data class Playing(val title: String?, val artist: String?) : MusicState
-    data class Paused(val title: String?, val artist: String?) : MusicState
+    data class Playing(
+        val title: String? = null,
+        val artist: String? = null,
+        val appLabel: String? = null,
+        val artwork: MediaArtwork? = null,
+        val canNext: Boolean = true,
+        val canPrev: Boolean = true
+    ) : MusicState
+    data class Paused(
+        val title: String? = null,
+        val artist: String? = null,
+        val appLabel: String? = null,
+        val artwork: MediaArtwork? = null,
+        val canNext: Boolean = true,
+        val canPrev: Boolean = true
+    ) : MusicState
     data object Unavailable : MusicState      // monitor cannot access media
 
     companion object {
         /** Pure snapshot mapping from AudioManager-style active flag (no metadata available). */
         fun fromActive(isMusicActive: Boolean): MusicState =
-            if (isMusicActive) Playing(null, null) else Hidden
+            if (isMusicActive) Playing() else Hidden
     }
 }
 

@@ -1,5 +1,6 @@
 package com.aura.ui.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,7 +40,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
+import android.graphics.BitmapFactory
 import com.aura.design.AuraTheme
 import com.aura.design.auraFocusRing
 import com.aura.domain.*
@@ -109,6 +112,7 @@ fun HomeScreen(
     battery: BatteryUiModel? = null,
     music: MusicState? = null,
     musicPlaying: Boolean = false,
+    musicAccess: Boolean = false,
     onMusicPlayPause: () -> Unit = {},
     onMusicNext: () -> Unit = {},
     onMusicPrev: () -> Unit = {},
@@ -205,7 +209,8 @@ fun HomeScreen(
                     battery = battery,
                     batteryEnabled = batteryEnabled,
                     musicState = music ?: MusicState.Hidden,
-                    musicEnabled = musicEnabled
+                    musicEnabled = musicEnabled,
+                    musicAccess = musicAccess
                 )
             }
 
@@ -459,13 +464,23 @@ private fun MusicRow(
     val colors = AuraTheme.colors
     val typography = AuraTheme.typography
     val isPlaying = music is MusicState.Playing
-    // No fabricated metadata: title/artist only when Android legitimately exposes them.
-    val title = (music as? MusicState.Playing)?.title
-        ?: (music as? MusicState.Paused)?.title
+    // Only render metadata Android legitimately exposes via the media session.
+    val title = (music as? MusicState.Playing)?.title ?: (music as? MusicState.Paused)?.title
     val label = title?.takeIf { it.isNotBlank() } ?: if (isPlaying) "Playing" else "Paused"
-    val sub = (music as? MusicState.Playing)?.artist
-        ?: (music as? MusicState.Paused)?.artist
-    val glyph = if (isPlaying) "♪" else "𝄞"
+    val artist = (music as? MusicState.Playing)?.artist ?: (music as? MusicState.Paused)?.artist
+    val appLabel = (music as? MusicState.Playing)?.appLabel ?: (music as? MusicState.Paused)?.appLabel
+    val artworkBytes = (music as? MusicState.Playing)?.artwork?.bytes
+        ?: (music as? MusicState.Paused)?.artwork?.bytes
+    val canNext = (music as? MusicState.Playing)?.canNext ?: (music as? MusicState.Paused)?.canNext ?: true
+    val canPrev = (music as? MusicState.Playing)?.canPrev ?: (music as? MusicState.Paused)?.canPrev ?: true
+
+    // Decode the small, already-downsampled artwork bytes once per change (no main-thread churn).
+    val imageBitmap = remember(artworkBytes) {
+        artworkBytes?.let { bytes ->
+            try { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() } catch (_: Exception) { null }
+        }
+    }
+
     Row(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(AuraTheme.radius.small))
@@ -476,19 +491,34 @@ private fun MusicRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(colors.surfaceBase), contentAlignment = Alignment.Center) {
-            Text(glyph, style = typography.caption)
+        Box(
+            Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(colors.surfaceBase),
+            contentAlignment = Alignment.Center
+        ) {
+            if (imageBitmap != null) {
+                Image(
+                    bitmap = imageBitmap,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+                )
+            } else {
+                Text(if (isPlaying) "♪" else "𝄞", style = typography.caption)
+            }
         }
         Column(Modifier.weight(1f)) {
             Text(label, style = typography.body, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (sub != null) {
-                Text(sub, style = typography.caption, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (artist != null) {
+                Text(artist, style = typography.caption, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (appLabel != null) {
+                Text(appLabel, style = typography.caption.copy(fontSize = typography.caption.fontSize * 0.85f),
+                    color = colors.textSecondary.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        AuraChip(variant = ChipVariant.Secondary("◀"), onClick = onPrev)
+        if (canPrev) AuraChip(variant = ChipVariant.Secondary("◀"), onClick = onPrev)
         // Button reflects ACTUAL state: pause while playing, play while paused.
         AuraChip(variant = ChipVariant.Action(if (isPlaying) "❚❚" else "▶"), onClick = onPlayPause)
-        AuraChip(variant = ChipVariant.Secondary("▶"), onClick = onNext)
+        if (canNext) AuraChip(variant = ChipVariant.Secondary("▶"), onClick = onNext)
     }
 }
 

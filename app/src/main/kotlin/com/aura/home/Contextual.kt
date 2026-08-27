@@ -69,7 +69,10 @@ object ContextualEngine {
         battery: BatteryUiModel?,
         batteryEnabled: Boolean,
         musicState: MusicState,
-        musicEnabled: Boolean
+        musicEnabled: Boolean,
+        /** True only when the user has granted notification access to AURA's narrow
+         *  media listener. Without it, the Music module is hidden (privacy-respecting). */
+        musicAccess: Boolean = true
     ): List<ContextualItem> {
         val items = mutableListOf<ContextualItem>()
 
@@ -88,8 +91,11 @@ object ContextualEngine {
             items += BatteryContextualItem(percent = battery!!.percent, charging = battery.charging)
         }
 
-        // Music is relevant while playing OR paused (paused still shows real state).
-        if (musicEnabled && (musicState is MusicState.Playing || musicState is MusicState.Paused)) {
+        // Music is relevant while playing OR paused (paused still shows real state), but
+        // only when the module is enabled AND the user has granted the optional, narrow
+        // media-access permission. Refusing it leaves Music hidden — nothing else is affected.
+        if (musicEnabled && musicAccess &&
+            (musicState is MusicState.Playing || musicState is MusicState.Paused)) {
             items += MusicContextualItem(state = musicState)
         }
 

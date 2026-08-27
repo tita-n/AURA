@@ -27,6 +27,7 @@ import com.aura.platform.android.AuraPrefs
 import com.aura.platform.android.BatteryMonitor
 import com.aura.platform.android.MusicMonitor
 import com.aura.platform.android.NextEventProvider
+import com.aura.platform.android.NotificationAccess
 import com.aura.platform.android.AuraWidgetHost
 import com.aura.platform.android.WallpaperPicker
 import com.aura.platform.android.WallpaperAnalyzer
@@ -279,9 +280,15 @@ class MainActivity : ComponentActivity() {
             val musicMonitor = remember(context) { MusicMonitor(context.applicationContext) }
             val musicState by musicMonitor.state.collectAsState()
             val musicPlaying = musicState is com.aura.home.MusicState.Playing
+            // Whether the user has granted AURA's narrow, music-only media-listener access.
+            // Re-checked on resume (e.g., after returning from Android's notification settings).
+            var musicAccessGranted by remember { mutableStateOf(NotificationAccess.isListenerEnabled(context)) }
             DisposableEffect(activityLifecycle) {
                 val obs = LifecycleEventObserver { _, e ->
-                    if (e == Lifecycle.Event.ON_RESUME) musicMonitor.refresh()
+                    if (e == Lifecycle.Event.ON_RESUME) {
+                        musicAccessGranted = NotificationAccess.isListenerEnabled(context)
+                        musicMonitor.refresh()
+                    }
                 }
                 activityLifecycle.addObserver(obs)
                 musicMonitor.start()
@@ -290,6 +297,11 @@ class MainActivity : ComponentActivity() {
                     musicMonitor.stop()
                     activityLifecycle.removeObserver(obs)
                 }
+            }
+            fun requestMusicAccess() {
+                // Android owns this settings screen; we never prompt at install or because
+                // AURA became the launcher. The user opts in explicitly, here.
+                NotificationAccess.openSettings(context)
             }
 
             // ---- Calendar / Next Event ----
@@ -584,6 +596,7 @@ class MainActivity : ComponentActivity() {
                             battery = batteryState,
                             music = musicState,
                             musicPlaying = musicPlaying,
+                            musicAccess = musicAccessGranted,
                             reducedMotion = reducedMotion,
                             onMusicPlayPause = { musicMonitor.playPause(); scope.launch { kotlinx.coroutines.delay(350); musicMonitor.refresh() } },
                             onMusicNext = { musicMonitor.next(); scope.launch { kotlinx.coroutines.delay(350); musicMonitor.refresh() } },
@@ -645,7 +658,9 @@ class MainActivity : ComponentActivity() {
                                 onClose = { editSurface = EditSurface.Closed },
                                 onOpenDockPicker = { editSurface = EditSurface.DockPicker },
                                 onOpenWidgetPicker = { editSurface = EditSurface.WidgetPicker },
-                                onBackToMain = { editSurface = EditSurface.Main }
+                                onBackToMain = { editSurface = EditSurface.Main },
+                                musicAccessGranted = musicAccessGranted,
+                                onRequestMusicAccess = { requestMusicAccess() }
                             )
                         }
                     }

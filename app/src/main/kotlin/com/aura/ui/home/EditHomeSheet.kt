@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,7 +57,9 @@ fun HomeEditOverlay(
     onClose: () -> Unit,
     onOpenDockPicker: () -> Unit,
     onOpenWidgetPicker: () -> Unit,
-    onBackToMain: () -> Unit
+    onBackToMain: () -> Unit,
+    musicAccessGranted: Boolean = false,
+    onRequestMusicAccess: () -> Unit = {}
 ) {
     if (surface is EditSurface.Closed) return
 
@@ -119,7 +122,9 @@ fun HomeEditOverlay(
                         onOpenWidgetPicker = onOpenWidgetPicker,
                         onChooseWallpaper = onChooseWallpaper,
                         widgetLabels = widgetLabels,
-                        onClose = onClose
+                        onClose = onClose,
+                        musicAccessGranted = musicAccessGranted,
+                        onRequestMusicAccess = onRequestMusicAccess
                     )
                 }
             }
@@ -135,10 +140,15 @@ private fun MainEditContent(
     onOpenWidgetPicker: () -> Unit,
     onChooseWallpaper: () -> Unit,
     widgetLabels: Map<Int, String>,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    musicAccessGranted: Boolean = false,
+    onRequestMusicAccess: () -> Unit = {}
 ) {
     val colors = AuraTheme.colors
     val typography = AuraTheme.typography
+    // Explainer shown only when the user opts into Music without having granted the
+    // narrow, music-only media access. Never prompted at install or by launcher role.
+    var showMusicExplain by remember { mutableStateOf(false) }
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text("Edit Home", style = typography.title, color = colors.textPrimary, modifier = Modifier.semantics { heading() })
@@ -248,10 +258,45 @@ private fun MainEditContent(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             disabled.forEach { mod ->
                 AuraChip(variant = ChipVariant.Action("Add ${mod.displayName()}"), onClick = {
-                    onSettingsChange(settings.copy(modules = ModuleLogic.enable(settings.modules, mod)))
+                    if (mod == HomeModuleType.Music && !musicAccessGranted) {
+                        showMusicExplain = true
+                    } else {
+                        onSettingsChange(settings.copy(modules = ModuleLogic.enable(settings.modules, mod)))
+                    }
                 })
             }
         }
+    }
+    // If Music is enabled but access not yet granted, explain why nothing shows yet.
+    if (HomeModuleType.Music in settings.modules && !musicAccessGranted) {
+        Text(
+            "Music is enabled — grant Notification Access in Android settings to show track info. This is used only for Music, never to read your other notifications.",
+            style = typography.caption, color = colors.textSecondary.copy(alpha = 0.8f)
+        )
+    }
+    if (showMusicExplain) {
+        AlertDialog(
+            onDismissRequest = { showMusicExplain = false },
+            title = { Text("Music needs notification access") },
+            text = {
+                Text(
+                    "To show track details and playback state from other music apps, AURA needs " +
+                    "Notification Access. This is used ONLY for the optional Music feature — never " +
+                    "to read your messages or other notifications. Android will open its Notification " +
+                    "Access settings."
+                )
+            },
+            confirmButton = {
+                AuraChip(variant = ChipVariant.Action("Enable"), onClick = {
+                    showMusicExplain = false
+                    onRequestMusicAccess()
+                    onSettingsChange(settings.copy(modules = ModuleLogic.enable(settings.modules, HomeModuleType.Music)))
+                })
+            },
+            dismissButton = {
+                AuraChip(variant = ChipVariant.Secondary("Not now"), onClick = { showMusicExplain = false })
+            }
+        )
     }
 
     Divider()

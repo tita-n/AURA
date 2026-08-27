@@ -15,9 +15,11 @@ object PlaybackMapper {
     const val STATE_PLAYING = 3
     const val STATE_PAUSED = 2
 
+    /** Pure integer-state mapping (legacy fallback path). Enriched [MusicState] defaults
+     *  keep artwork/capabilities neutral. */
     fun derive(playbackState: Int?, title: String?, artist: String?): MusicState = when (playbackState) {
-        STATE_PLAYING -> MusicState.Playing(title, artist)
-        STATE_PAUSED -> MusicState.Paused(title, artist)
+        STATE_PLAYING -> MusicState.Playing(title = title, artist = artist)
+        STATE_PAUSED -> MusicState.Paused(title = title, artist = artist)
         else -> MusicState.Hidden
     }
 }
