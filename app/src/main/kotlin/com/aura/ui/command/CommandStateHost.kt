@@ -104,7 +104,7 @@ private fun ActContent(
     onUndo: () -> Unit
 ) {
     // Inline results are the completed action, not a link
-    if (result.type == ResultType.Math || result.type == ResultType.Conversion) {
+    if (result.type == ResultType.Math || result.type == ResultType.Conversion || result.type == ResultType.Time || result.type == ResultType.Date) {
         InlineResult(
             value = result.inlineValue ?: result.title,
             query = result.inlineQuery ?: result.title,

@@ -26,6 +26,8 @@ class L2Resolver(
     private val messageMatcher = MessageMatcher(index)
     private val emailMatcher = EmailMatcher(index)
     private val settingsMatcher = SettingsMatcher(index)
+    private val brightnessMatcher = BrightnessMatcher()
+    private val reminderMatcher = ReminderMatcher()
     private val timerMatcher = TimerMatcher()
     private val mathMatcher = MathMatcher()
     private val unitMatcher = UnitMatcher()
@@ -36,6 +38,8 @@ class L2Resolver(
         "Call" to { n, r -> callMatcher.match(n, r) },
         "Message" to { n, r -> messageMatcher.match(n, r) },
         "Email" to { n, r -> emailMatcher.match(n, r) },
+        "Brightness" to { n, r -> brightnessMatcher.match(n, r) },
+        "Reminder" to { n, r -> reminderMatcher.match(n, r) },
         "Settings" to { n, r -> settingsMatcher.match(n, r) },
         "Timer" to { n, r -> timerMatcher.match(n, r) },
         "Math" to { n, r -> mathMatcher.match(n, r) },

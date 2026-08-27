@@ -40,7 +40,10 @@ class AndroidActionValidator(
             "display", "display_settings",
             "sound", "sound_settings",
             "battery", "battery_settings",
-            "apps", "apps_settings"
+            "apps", "apps_settings",
+            "accessibility", "accessibility_settings",
+            "location", "location_settings",
+            "date_and_time", "date_and_time_settings"
         )
         val normalized = key.lowercase().replace("-", "")
         return allowed.any { it.lowercase().replace("-", "") == normalized }

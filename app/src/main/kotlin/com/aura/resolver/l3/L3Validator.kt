@@ -22,7 +22,10 @@ class L3Validator(
         "display", "display_settings",
         "sound", "sound_settings",
         "battery", "battery_settings",
-        "apps", "apps_settings"
+        "apps", "apps_settings",
+        "accessibility", "accessibility_settings",
+        "location", "location_settings",
+        "date_and_time", "date_and_time_settings"
     )
 
     // Supported channels for SendMessage
@@ -35,6 +38,8 @@ class L3Validator(
             is AuraAction.SendMessage -> validateSendMessage(action, result)
             is AuraAction.SendEmail -> validateSendEmail(action, result)
             is AuraAction.OpenSettings -> validateOpenSettings(action, result)
+            is AuraAction.OpenCamera -> L3ValidationResult.Validated(ValidatedAction(result))
+            is AuraAction.SetReminder -> validateSetReminder(action, result)
             is AuraAction.SetTimer -> validateSetTimer(action, result)
             // Inline/copy actions are always valid (no Android execution needed)
             is AuraAction.Copy -> L3ValidationResult.Validated(ValidatedAction(result))
@@ -151,6 +156,15 @@ class L3Validator(
         val secs = action.durationSeconds
         if (secs <= 0) return L3ValidationResult.Invalid("Timer must be positive")
         if (secs > 24 * 3600) return L3ValidationResult.Invalid("Timer too long")
+        return L3ValidationResult.Validated(ValidatedAction(result))
+    }
+
+    private fun validateSetReminder(action: AuraAction.SetReminder, result: ResolvedResult): L3ValidationResult {
+        if (action.title.isBlank()) return L3ValidationResult.Invalid("Reminder text is empty")
+        // hour must be 0..23 (matcher already normalizes am/pm); minute 0..59; day offset sane
+        if (action.hour !in 0..23) return L3ValidationResult.Invalid("Invalid hour")
+        if (action.minute !in 0..59) return L3ValidationResult.Invalid("Invalid minute")
+        if (action.dayOffsetDays !in 0..365) return L3ValidationResult.Invalid("Invalid day offset")
         return L3ValidationResult.Validated(ValidatedAction(result))
     }
 }

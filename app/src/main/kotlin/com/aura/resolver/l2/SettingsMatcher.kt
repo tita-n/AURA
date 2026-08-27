@@ -18,7 +18,10 @@ class SettingsMatcher(private val index: L0Index) {
         "wifi" to listOf("wifi", "wi-fi", "wireless"),
         "bluetooth" to listOf("bluetooth"),
         "display" to listOf("display", "screen", "brightness"),
-        "sound" to listOf("sound", "volume", "audio")
+        "sound" to listOf("sound", "volume", "audio"),
+        "accessibility" to listOf("accessibility", "accessibility settings"),
+        "location" to listOf("location", "gps", "location services"),
+        "date_and_time" to listOf("date and time", "date & time", "date", "time", "date settings", "time settings")
     )
 
     // Patterns like "turn on wifi", "turn off bluetooth", "enable wifi", "open wifi settings"

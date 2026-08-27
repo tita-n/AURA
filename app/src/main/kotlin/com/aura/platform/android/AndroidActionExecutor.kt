@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.provider.AlarmClock
+import android.provider.CalendarContract
+import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import com.aura.domain.AuraAction
@@ -36,6 +38,8 @@ class AndroidActionExecutor(
             is AuraAction.OpenSettings -> executeOpenSettings(a)
             is AuraAction.SetTimer -> executeSetTimer(a)
             is AuraAction.SetAlarm -> executeSetAlarm(a)
+            is AuraAction.OpenCamera -> executeOpenCamera(a)
+            is AuraAction.SetReminder -> executeSetReminder(a)
             is AuraAction.Dial -> executeDial(a)
             is AuraAction.SendMessage -> executeSendMessage(a)
             is AuraAction.SendEmail -> executeSendEmail(a)
@@ -67,6 +71,9 @@ class AndroidActionExecutor(
             "sound", "soundsettings" -> Intent(Settings.ACTION_SOUND_SETTINGS)
             "battery", "batterysettings" -> Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
             "apps", "appssettings" -> Intent(Settings.ACTION_APPLICATION_SETTINGS)
+            "accessibility", "accessibilitysettings" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            "location", "locationsettings" -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            "date_and_time", "date_and_timesettings" -> Intent(Settings.ACTION_DATE_SETTINGS)
             else -> return ExecutionResult.Failure("Unsupported settings")
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -109,6 +116,64 @@ class AndroidActionExecutor(
         } catch (e: Exception) {
             Log.d("AURA_TIMER", "SetTimer failed: ${e.javaClass.simpleName} ${e.message}")
             ExecutionResult.Failure(e.message ?: "Failed to set timer")
+        }
+    }
+
+    private fun executeOpenCamera(action: AuraAction.OpenCamera): ExecutionResult {
+        val pm = context.packageManager
+        // If a specific camera package is known and launchable, open it directly.
+        if (!action.packageName.isNullOrBlank()) {
+            val direct = pm.getLaunchIntentForPackage(action.packageName)
+            if (direct != null) {
+                direct.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                return try {
+                    context.startActivity(direct)
+                    ExecutionResult.Success
+                } catch (e: Exception) {
+                    ExecutionResult.Failure(e.message ?: "Failed to open camera")
+                }
+            }
+        }
+        // Otherwise use the standard still-image camera intent. AURA never requests the CAMERA
+        // permission; the camera app owns its own permission. No custom camera is implemented.
+        val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
+            ExecutionResult.Success
+        } catch (e: ActivityNotFoundException) {
+            ExecutionResult.Unavailable
+        } catch (e: Exception) {
+            ExecutionResult.Failure(e.message ?: "Camera unavailable")
+        }
+    }
+
+    private fun executeSetReminder(action: AuraAction.SetReminder): ExecutionResult {
+        // Android has no public third-party reminder API. AURA honestly hands off to the system
+        // calendar editor (pre-filled event). It never claims a reminder was created.
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, action.hour)
+        cal.set(java.util.Calendar.MINUTE, action.minute)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        if (action.dayOffsetDays > 0) {
+            cal.add(java.util.Calendar.DAY_OF_MONTH, action.dayOffsetDays)
+        }
+        val begin = cal.timeInMillis
+        val intent = Intent(Intent.ACTION_INSERT).apply {
+            data = CalendarContract.Events.CONTENT_URI
+            putExtra(CalendarContract.Events.TITLE, action.title)
+            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
+            ExecutionResult.Success
+        } catch (e: ActivityNotFoundException) {
+            ExecutionResult.Unavailable
+        } catch (e: Exception) {
+            ExecutionResult.Failure(e.message ?: "Calendar unavailable")
         }
     }
 

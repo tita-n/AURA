@@ -97,7 +97,17 @@ object L0IndexFactory {
         settingsEntity("display", "Display"),
         settingsEntity("display_settings", "Display settings"),
         settingsEntity("sound", "Sound"),
-        settingsEntity("sound_settings", "Sound settings")
+        settingsEntity("sound_settings", "Sound settings"),
+        settingsEntity("battery", "Battery"),
+        settingsEntity("battery_settings", "Battery settings"),
+        settingsEntity("apps", "Apps"),
+        settingsEntity("apps_settings", "Apps settings"),
+        settingsEntity("accessibility", "Accessibility"),
+        settingsEntity("accessibility_settings", "Accessibility settings"),
+        settingsEntity("location", "Location"),
+        settingsEntity("location_settings", "Location settings"),
+        settingsEntity("date_and_time", "Date & time"),
+        settingsEntity("date_and_time_settings", "Date & time settings")
     )
 
     /**
@@ -131,6 +141,9 @@ object L0IndexFactory {
         settingsEntity("display", "Display"),
         settingsEntity("sound", "Sound"),
         settingsEntity("battery", "Battery"),
-        settingsEntity("apps", "Apps")
+        settingsEntity("apps", "Apps"),
+        settingsEntity("accessibility", "Accessibility"),
+        settingsEntity("location", "Location"),
+        settingsEntity("date_and_time", "Date & time")
     )
 }

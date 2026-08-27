@@ -67,7 +67,11 @@ enum class ResultType {
     Message,
     Email,
     Call,
-    DeepLink
+    DeepLink,
+    Camera,
+    Time,
+    Date,
+    Reminder
 }
 
 /**
@@ -121,6 +125,23 @@ sealed interface AuraAction {
     data class SetAlarm(val hour: Int, val minute: Int) : AuraAction
     data class SetTimer(val durationSeconds: Int) : AuraAction
     data class OpenSettings(val panel: String) : AuraAction
+    /**
+     * Launch the device camera application. AURA requests no CAMERA permission; the camera
+     * app owns its own permission. An optional packageName (when known) is launched directly,
+     * otherwise the standard still-image camera intent is used.
+     */
+    data class OpenCamera(val packageName: String? = null) : AuraAction
+    /**
+     * Local reminder. Android has no public third-party reminder API, so AURA honestly hands
+     * off to the system calendar editor (pre-filled event) — it never claims a reminder was
+     * created. dayOffsetDays supports "tomorrow" (0 = today/next occurrence).
+     */
+    data class SetReminder(
+        val title: String,
+        val hour: Int,
+        val minute: Int,
+        val dayOffsetDays: Int = 0
+    ) : AuraAction
     data class SearchPlayStore(val query: String) : AuraAction
     data object NoOp : AuraAction
 }

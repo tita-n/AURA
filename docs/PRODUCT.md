@@ -47,6 +47,45 @@ Android handles Android. AURA handles intent.
 | Reduced-motion (calm module animation) | ✅ Implemented |
 | Customization (theme, accent, wallpaper entry, animation) | ✅ Implemented |
 | Weather module | ❌ CUT — network-dependent; violates local-first |
+| **Command Pack 1 (Phase 4A)** | ✅ Implemented — see below |
+| &nbsp;&nbsp;Alarm (deterministic time) | ✅ Implemented — `AlarmClock.ACTION_SET_ALARM` |
+| &nbsp;&nbsp;Camera launch | ✅ Implemented — system camera intent (no CAMERA permission) |
+| &nbsp;&nbsp;Time / Date / Day queries | ✅ Implemented — inline, device-local, no network |
+| &nbsp;&nbsp;System Settings (expanded catalog) | ✅ Implemented — closed catalog, `Settings` intents |
+| &nbsp;&nbsp;Brightness | ⚠️ Honest fallback — opens Display settings (no `WRITE_SETTINGS`) |
+| &nbsp;&nbsp;Reminder | ⚠️ Honest fallback — system calendar event (no reminder API) |
+| &nbsp;&nbsp;Screenshot | ❌ Unsupported — Android forbids 3rd-party capture; informs user |
+
+## COMMAND PACK 1 — TIME + DEVICE ACTIONS (Phase 4A)
+
+AURA expands the Command Bar with a small, deterministic set of local actions that Android can
+perform on the device. Every new intent flows through the existing L0 → L1 → L2 → L3 pipeline
+and is validated by L3 before execution. No AI, no cloud, no new visual states.
+
+| Command | Local? | Android executes? | Permission required | Platform limitation |
+|---|---|---|---|---|
+| Alarm | Yes | Yes — `AlarmClock.ACTION_SET_ALARM` | None | Day qualifier (tomorrow) is best-effort (API sets next occurrence) |
+| Camera | Yes | Yes — system camera intent | None (AURA never requests CAMERA) | AURA does not build a camera; it hands off |
+| Time / Date / Day | Yes | Inline result, no execution | None | Optional city→TimeZone is a small offline table; unknown city rejected |
+| System Settings | Yes | Yes — `Settings` intents (closed catalog) | None | Catalog is closed; unknown settings rejected |
+| Brightness | Yes | No direct set | `WRITE_SETTINGS` (NOT requested) | Falls back to opening Display settings honestly |
+| Reminder | Yes | Yes — system calendar event (`ACTION_INSERT`) | None | No reminder API; opens calendar prefilled, never claims creation |
+| Screenshot | No | No | — | Android forbids 3rd-party capture without root/MediaProjection/Accessibility — informs user |
+
+**Supported examples**
+- `alarm 6:30`, `set an alarm for 6:30`, `wake me at 6:30`, `wake me tomorrow at 6:30am`, `18:30`, `6am`
+- `open camera`, `camera`, `launch camera`, `take a photo`, `selfie`
+- `what time is it`, `what is today's date`, `what day is it`, `what time is it in Lagos`
+- `open Wi-Fi settings`, `open Bluetooth`, `open Display settings`, `open Battery`, `open Sound`,
+  `open Apps`, `open Accessibility`, `open Location`, `open Date & time`
+- `brightness 70%`, `increase brightness` (→ opens Display settings)
+- `remind me to call Mum at 3pm`, `remind me tomorrow at 9am`
+
+**Honesty invariants**
+- Screenshot is NEVER faked. AURA reports the platform limitation (Power + Volume Down) and does not claim success.
+- Brightness is NEVER silently changed. AURA opens Display settings and explains the permission requirement.
+- Reminders are NEVER claimed as created. AURA opens the calendar editor with the details prefilled.
+- Time/Date are computed from the device clock with an optional offline city→TimeZone table; unknown cities are rejected, never guessed.
 
 ## NOTIFICATION PANEL — REJECTED
 
