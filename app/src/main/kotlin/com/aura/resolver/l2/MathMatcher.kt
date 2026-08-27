@@ -9,24 +9,30 @@ import com.aura.domain.ResultType
  * Delegates to MathGrammar after stripping prefix.
  */
 class MathMatcher {
-    private val prefixes = listOf(
-        Regex("""^\s*what\s+is\s+(.+)$""", RegexOption.IGNORE_CASE),
-        Regex("""^\s*calculate\s+(.+)$""", RegexOption.IGNORE_CASE),
-        Regex("""^\s*compute\s+(.+)$""", RegexOption.IGNORE_CASE),
-        Regex("""^\s*solve\s+(.+)$""", RegexOption.IGNORE_CASE)
+    private val prefixes = Regex(
+        """^\s*(what\s*is|whats|calculate|compute|solve|how\s+much\s+is|how\s+many\s+is|how\s+many|tell\s+me)\s+(.+)$""",
+        RegexOption.IGNORE_CASE
     )
 
     fun match(normalized: String, raw: String): L2Result {
-        var expr: String? = null
         val trimmed = raw.trim()
-        for (p in prefixes) {
-            val m = p.matchEntire(trimmed) ?: p.matchEntire(normalized)
-            if (m != null) { expr = m.groupValues[1]; break }
+        // Strip a natural-language prefix ("what is", "calculate", …) if present.
+        var expr: String? = null
+        val m = prefixes.matchEntire(trimmed) ?: prefixes.matchEntire(normalized)
+        if (m != null) expr = m.groupValues[2]
+        // No prefix: treat the whole query as a potential natural-math expression
+        // (e.g. "500 plus 200"); non-math queries fall through to other resolvers.
+        if (expr == null) expr = trimmed
+        val inner = expr.trim()
+        if (inner.isEmpty()) return L2Result.Unrecognized
+        // Ambiguous lone percentage (e.g. "10 percent") — do not guess a result.
+        if (NaturalMath.isLonePercentage(inner)) {
+            return L2Result.Invalid("10% of what? Try e.g. '10% of 500'")
         }
-        if (expr == null) return L2Result.Unrecognized
-        // Delegate to MathGrammar
+        val mathExpr = NaturalMath.normalize(inner) ?: return L2Result.Unrecognized
+        // Delegate to MathGrammar (strict arithmetic parser — no eval).
         val mathGrammar = com.aura.resolver.l1.MathGrammar()
-        return when (val r = mathGrammar.parse(expr.lowercase(), expr)) {
+        return when (val r = mathGrammar.parse(mathExpr, mathExpr)) {
             is com.aura.resolver.l1.L1Result.Resolved -> L2Result.Resolved(r.result)
             is com.aura.resolver.l1.L1Result.Invalid -> L2Result.Invalid(r.message)
             else -> L2Result.Unrecognized

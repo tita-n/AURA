@@ -12,6 +12,15 @@
          Without this, SET_TIMER throws SecurityException: Permission Denial. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
+    <!-- Local file search (Phase 4C): scoped-storage MediaStore access ONLY.
+         Deliberately NOT MANAGE_EXTERNAL_STORAGE. READ_EXTERNAL_STORAGE covers
+         non-media documents on API 33+; the granular READ_MEDIA_* cover media.
+         If the permission is unavailable, AURA reports it honestly and shows no fake results. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
     <!-- Package visibility for launcher discovery (API 30+) -->
     <queries>
         <intent>

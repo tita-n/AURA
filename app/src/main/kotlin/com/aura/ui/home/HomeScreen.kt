@@ -175,7 +175,19 @@ fun HomeScreen(
     }
     val haptics = LocalHapticFeedback.current
 
-    Box(Modifier.fillMaxSize()) {
+    // Home-level long-press surface: ONE gesture detector on the root container. Interactive
+    // children (Command Bar, Dock, App Library affordance, widgets, scroll) consume their own
+    // pointer events, so this only fires on genuinely empty areas — not the clock specifically.
+    Box(
+        Modifier
+            .fillMaxSize()
+            .pointerInput(haptics) {
+                detectTapGestures(onLongPress = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onOpenEdit()
+                })
+            }
+    ) {
         if (wallpaperEnabled) {
             // Wallpaper is the system wallpaper behind the transparent activity window
             // (FLAG_SHOW_WALLPAPER in MainActivity). We darken it with a vertical scrim:
@@ -210,16 +222,11 @@ fun HomeScreen(
         ) {
             Spacer(Modifier.height(32.dp))
 
-            // Time/Presence header — long-press to edit
+            // Time/Presence header — long-press is now owned by the Home root (see Box above),
+            // so editing is reachable from any empty area, not only the clock.
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .pointerInput(haptics) {
-                        detectTapGestures(onLongPress = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onOpenEdit()
-                        })
-                    },
+                    .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 TimeAndPresenceBlock(
@@ -260,12 +267,6 @@ fun HomeScreen(
                 val listModifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .pointerInput(haptics) {
-                        detectTapGestures(onLongPress = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onOpenEdit()
-                        })
-                    }
                 LazyColumn(
                     modifier = listModifier,
                     verticalArrangement = Arrangement.spacedBy(8.dp),

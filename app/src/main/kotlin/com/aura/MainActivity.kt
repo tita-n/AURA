@@ -24,6 +24,7 @@ import com.aura.home.*
 import com.aura.platform.AndroidAppIndexProvider
 import com.aura.platform.android.AndroidContactIndexProvider
 import com.aura.platform.android.AuraPrefs
+import com.aura.platform.android.AndroidFileSearchSource
 import com.aura.platform.android.BatteryMonitor
 import com.aura.platform.android.MusicMonitor
 import com.aura.platform.android.NextEventProvider
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
             val executor = remember(context) { AndroidActionExecutor(context.applicationContext) }
+            val fileSearchSource = remember(context) { AndroidFileSearchSource(context.applicationContext) }
             val contactProvider = remember(context) { AndroidContactIndexProvider(context.applicationContext) }
             val auraPrefs = remember(context) { AuraPrefs(context.applicationContext) }
             val homeSettings by auraPrefs.settings.collectAsState()
@@ -358,7 +360,7 @@ class MainActivity : ComponentActivity() {
             val currentIndexState = remember { mutableStateOf(L0IndexFactory.buildIndex(emptyList(), contacts = emptyList())) }
             val routerState = remember {
                 val idx = currentIndexState.value
-                mutableStateOf(IntentRouter(L0Resolver(idx), L1Resolver(idx), L2Resolver(idx), L3Validator(idx)))
+                mutableStateOf(IntentRouter(L0Resolver(idx), L1Resolver(idx), L2Resolver(idx, fileSearchSource), L3Validator(idx)))
             }
 
             val contactsPermissionLauncher = rememberLauncherForActivityResult(
@@ -377,7 +379,7 @@ class MainActivity : ComponentActivity() {
                             contacts = contacts
                         )
                         currentIndexState.value = newIndex
-                        routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
+                        routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex, fileSearchSource), L3Validator(newIndex))
                     }
                 }
             }
@@ -394,7 +396,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val newIndex = L0IndexFactory.buildIndex(realApps, contacts = contacts)
                 currentIndexState.value = newIndex
-                routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
+                routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex, fileSearchSource), L3Validator(newIndex))
             }
 
             var query by remember { mutableStateOf("") }
@@ -469,7 +471,7 @@ class MainActivity : ComponentActivity() {
                         } else emptyList()
                         val newIndex = L0IndexFactory.buildIndex(apps, contacts = contacts)
                         currentIndexState.value = newIndex
-                        routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex), L3Validator(newIndex))
+                        routerState.value = IntentRouter(L0Resolver(newIndex), L1Resolver(newIndex), L2Resolver(newIndex, fileSearchSource), L3Validator(newIndex))
                         // Prune dock entries whose app was uninstalled
                         val installed = apps.map { it.id.removePrefix("app:") }.toSet()
                         val prunedDock = DockLogic.prune(auraPrefs.settings.value.dock, installed)
@@ -519,6 +521,7 @@ class MainActivity : ComponentActivity() {
                             onCandidateSelect = { candidate ->
                                 val isApp = candidate.id.startsWith("app:")
                                 val isSettings = candidate.id.startsWith("settings:")
+                                val isFile = candidate.id.startsWith("file:")
                                 val result = when {
                                     isApp -> {
                                         val pkg = candidate.id.removePrefix("app:")
@@ -534,13 +537,22 @@ class MainActivity : ComponentActivity() {
                                             type = ResultType.Settings, action = AuraAction.OpenSettings(key)
                                         )
                                     }
+                                    isFile -> ResolvedResult(
+                                        id = candidate.id, title = candidate.title, subtitle = candidate.disambiguation,
+                                        type = ResultType.File,
+                                        action = AuraAction.OpenFile(
+                                            uriString = candidate.id.removePrefix("file:"),
+                                            displayName = candidate.title,
+                                            mimeType = null
+                                        )
+                                    )
                                     else -> ResolvedResult(
                                         id = candidate.id, title = candidate.title, subtitle = candidate.disambiguation,
                                         type = ResultType.Contact, action = AuraAction.NoOp
                                     )
                                 }
                                 commandState = CommandState.Act(result)
-                                if (isApp || isSettings) {
+                                if (isApp || isSettings || isFile) {
                                     scope.launch {
                                         val validation = L3Validator(currentIndexState.value).validate(result)
                                         if (validation is com.aura.resolver.l3.L3ValidationResult.Validated) {

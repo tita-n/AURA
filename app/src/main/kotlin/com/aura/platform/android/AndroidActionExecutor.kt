@@ -40,6 +40,7 @@ class AndroidActionExecutor(
             is AuraAction.SetAlarm -> executeSetAlarm(a)
             is AuraAction.OpenCamera -> executeOpenCamera(a)
             is AuraAction.SetReminder -> executeSetReminder(a)
+            is AuraAction.OpenFile -> executeOpenFile(a)
             is AuraAction.Dial -> executeDial(a)
             is AuraAction.SendMessage -> executeSendMessage(a)
             is AuraAction.SendEmail -> executeSendEmail(a)
@@ -146,6 +147,30 @@ class AndroidActionExecutor(
             ExecutionResult.Unavailable
         } catch (e: Exception) {
             ExecutionResult.Failure(e.message ?: "Camera unavailable")
+        }
+    }
+
+    private fun executeOpenFile(action: AuraAction.OpenFile): ExecutionResult {
+        // SEARCH ONLY: hand the content Uri to Android's normal file-opening chooser. AURA
+        // never becomes a file manager. Grant read permission to the chosen app; the platform
+        // source only ever produced content:// Uris for files the storage permission can read.
+        return try {
+            val uri = android.net.Uri.parse(action.uriString)
+            val mime = action.mimeType?.takeIf { it.isNotBlank() }
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                if (mime != null) setDataAndType(uri, mime) else data = uri
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(intent, "Open ${action.displayName}").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+            ExecutionResult.Success
+        } catch (e: ActivityNotFoundException) {
+            ExecutionResult.Unavailable
+        } catch (e: Exception) {
+            ExecutionResult.Failure(e.message ?: "Cannot open file")
         }
     }
 

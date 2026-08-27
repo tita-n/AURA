@@ -115,6 +115,39 @@ examples rather than a dedicated onboarding flow.
 - Deterministic pattern matching only — no AI, network, or analytics. Random text and ordinary
   app-name misses produce no hint. The hint disappears on a successful/ambiguous resolution.
 
+## COMMAND BAR HARDENING (Phase 4C)
+
+Three focused fixes — no new command families, no redesign, Music/Notifications untouched.
+
+**Local file search**
+- Queries: `find my files`, `find downloads`, `find invoice.pdf`, `search for invoice`,
+  `find the PDF I downloaded`, `find photos`, `find screenshots`.
+- Scope (Android 14 scoped storage): searches MediaStore collections only — Downloads, Documents,
+  Pictures/DCIM, Movies, Music — never a raw recursive filesystem walk, never MANAGE_EXTERNAL_STORAGE.
+  Reads only display name + size + MIME type; opens via a content Uri + chooser. SEARCH ONLY:
+  no navigation, edit, delete, move, copy, or cloud.
+- Single result → ACT (tappable, opens the file); multiple → ASK (candidate list). No match →
+  calm empty; storage permission missing → honest error, never a fake result.
+- Architecture: pure `FileSearchSource` interface + models in `resolver`; all MediaStore/Uri code
+  stays in `platform/android` (AndroidFileSearchSource). Domain/resolver never import Context/Uri.
+
+**Natural-language calculator**
+- No special grammar required. Works: `10% of 500`, `what is 10% of 500`, `calculate 15 percent
+  of 4000`, `what's 15 percent of 4000`, `500 plus 200`, `500 minus 75`, `25 times 4`,
+  `100 divided by 5`, `how much is 15% of 3000`, decimals (`2.5 plus 3.5`).
+- Deterministic: word operators and percentage "of" are stripped into the existing strict
+  arithmetic parser (no eval, no functions, no arbitrary code). Division by zero → honest error.
+  A lone `10 percent` (no base) is treated as ambiguous → error, never a guessed number.
+
+**Reliable Home long-press**
+- Root cause of the inconsistency: the edit gesture was attached only to the Time header Box and
+  (conditionally) to the extras LazyColumn, so on layouts/devices where that region was absent
+  or collapsed, long-press only worked on the clock.
+- Fix: a single `detectTapGestures(onLongPress)` lives on the Home root container. Interactive
+  children (Command Bar, Dock, App Library affordance, widgets, scrolling) consume their own
+  pointer events, so the gesture fires only on genuinely empty areas — not the clock specifically.
+  Short tap is unchanged; no invisible a11y button is added.
+
 ## NOTIFICATION PANEL — REJECTED
 
 **Status: REJECTED as a Panel. A narrow, music-only media listener is OPTIONAL and

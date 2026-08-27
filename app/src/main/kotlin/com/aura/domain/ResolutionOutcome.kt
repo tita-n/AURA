@@ -71,7 +71,8 @@ enum class ResultType {
     Camera,
     Time,
     Date,
-    Reminder
+    Reminder,
+    File
 }
 
 /**
@@ -141,6 +142,17 @@ sealed interface AuraAction {
         val hour: Int,
         val minute: Int,
         val dayOffsetDays: Int = 0
+    ) : AuraAction
+    /**
+     * Open a local file via Android's normal file-opening mechanism (ACTION_VIEW + chooser).
+     * The uriString is an opaque content:// Uri string; the domain layer never imports Uri or
+     * ContentResolver — only the platform executor parses it. AURA stays a searcher, not a
+     * file manager.
+     */
+    data class OpenFile(
+        val uriString: String,
+        val displayName: String,
+        val mimeType: String? = null
     ) : AuraAction
     data class SearchPlayStore(val query: String) : AuraAction
     data object NoOp : AuraAction

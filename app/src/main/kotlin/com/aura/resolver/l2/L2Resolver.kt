@@ -2,6 +2,8 @@ package com.aura.resolver.l2
 
 import com.aura.resolver.L0Index
 import com.aura.resolver.Normalizer
+import com.aura.resolver.FileSearchSource
+import com.aura.resolver.NoOpFileSearchSource
 
 /**
  * L2 Semantic Resolution — deterministic, no ML, no network.
@@ -19,7 +21,8 @@ import com.aura.resolver.Normalizer
  * 8. Unit (convert ... to ...)
  */
 class L2Resolver(
-    private val index: L0Index
+    private val index: L0Index,
+    private val fileSearchSource: FileSearchSource = NoOpFileSearchSource
 ) {
     private val openMatcher = OpenAppMatcher(index)
     private val callMatcher = CallMatcher(index)
@@ -31,6 +34,7 @@ class L2Resolver(
     private val timerMatcher = TimerMatcher()
     private val mathMatcher = MathMatcher()
     private val unitMatcher = UnitMatcher()
+    private val fileSearchMatcher = FileSearchMatcher(fileSearchSource)
 
     // Order matters: explicit priority
     private val orderedMatchers: List<Pair<String, (String, String) -> L2Result>> = listOf(
@@ -43,7 +47,8 @@ class L2Resolver(
         "Settings" to { n, r -> settingsMatcher.match(n, r) },
         "Timer" to { n, r -> timerMatcher.match(n, r) },
         "Math" to { n, r -> mathMatcher.match(n, r) },
-        "Unit" to { n, r -> unitMatcher.match(n, r) }
+        "Unit" to { n, r -> unitMatcher.match(n, r) },
+        "FileSearch" to { n, r -> fileSearchMatcher.match(n, r) }
     )
 
     fun resolve(rawQuery: String): L2Result {
