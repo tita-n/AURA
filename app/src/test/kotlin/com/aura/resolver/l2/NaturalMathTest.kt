@@ -1,5 +1,6 @@
 package com.aura.resolver.l2
 
+import com.aura.domain.calc.NaturalMath
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

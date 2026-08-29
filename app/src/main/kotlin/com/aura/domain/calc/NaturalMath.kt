@@ -1,17 +1,17 @@
-package com.aura.resolver.l2
+package com.aura.domain.calc
 
 /**
  * Deterministic natural-language → infix-math normalizer for the calculator.
  *
  * Strips word operators and percentage "of" phrasing into the strict arithmetic grammar that
- * [MathGrammar]/[com.aura.resolver.l1.MathParser] already understands:
+ * [ExpressionParser] understands:
  *   "500 plus 200"        → "500 + 200"
- *   "25 times 4"           → "25 * 4"
- *   "100 divided by 5"     → "100 / 5"
- *   "10% of 500"           → "(10/100)*500"
- *   "15 percent of 4000"   → "(15/100)*4000"
+ *   "25 times 4"          → "25 * 4"
+ *   "100 divided by 5"    → "100 / 5"
+ *   "10% of 500"          → "(10/100)*500"
+ *   "15 percent of 4000"  → "(15/100)*4000"
  *
- * Hard rules (Phase 4C):
+ * Hard rules:
  *  - No eval(), no functions, no arbitrary code. Only fixed regex replacements over a known map.
  *  - Returns null unless the result is genuinely an arithmetic expression (contains an operator
  *    and no letters remain), so non-math queries fall through to other resolvers.
@@ -32,10 +32,6 @@ object NaturalMath {
         Regex("""\bminus\b""", RegexOption.IGNORE_CASE) to "-"
     )
 
-    /**
-     * Normalize a natural-language arithmetic query into a strict infix expression, or return
-     * null when the input is not arithmetic (so the caller can fall through).
-     */
     fun normalize(input: String): String? {
         var s = input.lowercase()
         s = PERCENT_OF.replace(s) { "(${it.groupValues[1]}/100)*${it.groupValues[2]}" }
@@ -44,9 +40,7 @@ object NaturalMath {
             s = re.replace(s, " $sym ")
         }
         s = s.replace(Regex("""\s+"""), " ").trim()
-        // Must contain an arithmetic operator to be math.
         if (!s.any { it in "+-*/()" }) return null
-        // Any leftover letters means it was not arithmetic — do not force it.
         if (s.any { it.isLetter() }) return null
         return s
     }

@@ -41,6 +41,7 @@ class L3Validator(
             is AuraAction.OpenCamera -> L3ValidationResult.Validated(ValidatedAction(result))
             is AuraAction.SetReminder -> validateSetReminder(action, result)
             is AuraAction.OpenFile -> validateOpenFile(action, result)
+            is AuraAction.RequestStorageAccess -> L3ValidationResult.Validated(ValidatedAction(result))
             is AuraAction.SetTimer -> validateSetTimer(action, result)
             // Inline/copy actions are always valid (no Android execution needed)
             is AuraAction.Copy -> L3ValidationResult.Validated(ValidatedAction(result))

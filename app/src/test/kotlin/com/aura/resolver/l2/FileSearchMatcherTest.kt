@@ -31,6 +31,8 @@ class FileSearchMatcherTest {
             sizeLabel = size,
             mimeType = mime,
             locationLabel = location,
+            pathLabel = location,
+            modifiedMillis = 0,
             contentUriString = "content://$id"
         )
 
@@ -120,10 +122,14 @@ class FileSearchMatcherTest {
     }
 
     @Test
-    fun non_file_queries_are_not_hijacked() {
-        // "open chrome" has no file-search verb; matcher must not claim a file.
-        val r = match("open chrome")
-        assertTrue(r is L2Result.Unrecognized)
+    fun requires_manage_storage_offers_grant_when_empty() {
+        source.responses[FileSearchRequest("invoice", null)] =
+            FileSearchResponse(emptyList(), requiresManageStorage = true)
+        val r = match("find invoice")
+        assertTrue(r is L2Result.Resolved)
+        val res = (r as L2Result.Resolved).result
+        assertEquals("Grant file access", res.title)
+        assertTrue(res.action is AuraAction.RequestStorageAccess)
     }
 
     @Test
@@ -131,12 +137,30 @@ class FileSearchMatcherTest {
         assertTrue(match("f") is L2Result.Unrecognized)
     }
 
+    @Test
+    fun non_file_queries_are_not_hijacked() {
+        // "open chrome" has no file-search verb; matcher must not claim a file.
+        val r = match("open chrome")
+        assertTrue(r is L2Result.Unrecognized)
+    }
+
+    @Test
+    fun find_pdf_ranks_pdf_above_txt() {
+        source.responses[FileSearchRequest("pdf", null)] = FileSearchResponse(listOf(
+            file("1", "notes.txt", "Documents", "1 KB"),
+            file("2", "notes.pdf", "Documents", "2 KB")
+        ))
+        val r = match("find PDF")
+        assertTrue(r is L2Result.Ambiguous)
+        assertEquals("notes.pdf", (r as L2Result.Ambiguous).group.candidates.first().title)
+    }
+
     private class FakeFileSearchSource : FileSearchSource {
         val responses = mutableMapOf<FileSearchRequest, FileSearchResponse>()
         var lastRequest: FileSearchRequest? = null
         override fun search(request: FileSearchRequest): FileSearchResponse {
             lastRequest = request
-            return responses[request] ?: FileSearchResponse(emptyList(), permissionDenied = false)
+            return responses[request] ?: FileSearchResponse(emptyList())
         }
     }
 }

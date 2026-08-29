@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared-storage root for FileProvider. Covers /storage/emulated/0 (the emulated primary),
+     which is exactly the tree AURA indexes for local file search. Files outside this root
+     (e.g., removable SD) are not opened via FileProvider. -->
+<paths>
+    <external-path name="external" path="." />
+</paths>

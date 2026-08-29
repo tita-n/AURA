@@ -122,8 +122,9 @@ Three focused fixes — no new command families, no redesign, Music/Notification
 **Local file search**
 - Queries: `find my files`, `find downloads`, `find invoice.pdf`, `search for invoice`,
   `find the PDF I downloaded`, `find photos`, `find screenshots`.
-- Scope (Android 14 scoped storage): searches MediaStore collections only — Downloads, Documents,
-  Pictures/DCIM, Movies, Music — never a raw recursive filesystem walk, never MANAGE_EXTERNAL_STORAGE.
+- Scope (Android 14 scoped storage): Phase 4C searched MediaStore collections only and never
+  requested MANAGE_EXTERNAL_STORAGE. Phase 5 broadens this to **full on-device storage** using
+  MANAGE_EXTERNAL_STORAGE requested on-demand (see PHASE 5 — COMMAND BAR: FILE SEARCH + CALCULATOR).
   Reads only display name + size + MIME type; opens via a content Uri + chooser. SEARCH ONLY:
   no navigation, edit, delete, move, copy, or cloud.
 - Single result → ACT (tappable, opens the file); multiple → ASK (candidate list). No match →
@@ -147,6 +148,51 @@ Three focused fixes — no new command families, no redesign, Music/Notification
   children (Command Bar, Dock, App Library affordance, widgets, scrolling) consume their own
   pointer events, so the gesture fires only on genuinely empty areas — not the clock specifically.
   Short tap is unchanged; no invisible a11y button is added.
+
+## PHASE 5 — COMMAND BAR: FILE SEARCH + CALCULATOR (active)
+
+Three focused capabilities. Builds directly on the Phase 4C pipeline — file search and the
+calculator are first-class L2 matchers; Home long-press is unchanged from Phase 4C.
+
+**Broad, local file search**
+- Queries: `find my files`, `find downloads`, `find invoice.pdf`, `search for invoice`,
+  `find the PDF I downloaded`, `find photos`, `find screenshots`, `find music`, `find videos`.
+- Real discovery, not scoped-store-only: when `MANAGE_EXTERNAL_STORAGE` is granted, AURA walks the
+  shared storage with a bounded, cancelable `FileSystemWalker` and keeps an **in-memory index**
+  (`FileSearchRepository`) so repeat searches are fast and non-blocking; MediaStore remains the
+  source for media metadata. Without the permission, search falls back to MediaStore collections
+  (the Phase 4C behaviour) plus an honest `RequestStorageAccess` action when a broad query would
+  clearly benefit from broader access.
+- `MANAGE_EXTERNAL_STORAGE` is **never** requested at install and **never** auto-prompted. It is
+  shown only from a clear in-app rationale after the user explicitly runs a broad file query that
+  returns nothing useful — tapping it opens the system settings page. No raw `file://` paths ever
+  leave the app: opened files are shared through a `FileProvider` (`${applicationId}.fileprovider`)
+  with `FLAG_GRANT_READ_URI_PERMISSION`.
+- Ranking (`rankFileResults`): exact name > stem > prefix > substring > path mention, then type
+  match (pdf/doc/image/…), then location hint (Downloads/Pictures/…), then recency. Single match
+  → ACT (tap opens it); multiple → ASK (candidate sheet); none → calm empty; permission denied →
+  honest error, never a fake result.
+- Architecture: pure `FileSearchRepository`/`FileSearchResult` models + `FileSystemWalker` (pure
+  `java.io` traversal, bounded/cancelable) in `resolver`/`platform`; ALL MediaStore/Uri/FileProvider
+  code lives in `platform/android` (`FileSearchRepository`, `FileSystemWalker`). Domain/resolver
+  never import `Context`/`Uri`/`MediaStore`. SEARCH ONLY — no manage/edit/delete/move/copy/cloud.
+
+**Real natural-language calculator**
+- No grammar gymnastics required. Works: `10% of 500`, `what is 10% of 500`, `calculate 15 percent
+  of 4000`, `what's 15 percent of 8000`, `500 plus 200`, `500 minus 75`, `25 times 4`,
+  `100 divided by 5`, `500 increased by 10%`, `500 reduced by 20%`, `15% off 50`, `4000 * 0.15`,
+  `2.5 * 8`, `(20 + 10) * 3`.
+- Real engine: a recursive-descent `ExpressionParser` (integers, decimals, parentheses, `+ - * / %`,
+  unary minus, precedence, bounded length/token/depth) feeds a `Calculator` that first turns English
+  into strict infix (word operators, percentage `of`/`off`/`increased`/`reduced`, standalone
+  fractions) and then evaluates — **no eval, no functions, no reflection, no arbitrary code**
+  (verified by an explicit rejection test). Division/modulo by zero → honest error. A lone
+  `10 percent` with no base is treated as ambiguous → error, never a guessed number.
+- Percentage semantics are explicit: `10% of 500` = 50, `500 increased by 10%` = 550,
+  `15% off 50` = 42.5, `10% + 20%` = 0.3 (the sum of two fractions, **not** 10% of 20).
+
+**Reliable Home long-press** — unchanged from Phase 4C (single root `detectTapGestures(onLongPress)`
+that fires only on empty areas; interactive children keep their own events).
 
 ## NOTIFICATION PANEL — REJECTED
 

@@ -154,6 +154,12 @@ sealed interface AuraAction {
         val displayName: String,
         val mimeType: String? = null
     ) : AuraAction
+    /**
+     * Request broad (all-files) storage access so AURA can search all of shared storage, not just
+     * media. Opens Android's settings screen; AURA never reads files until the user grants it and
+     * fails gracefully when withheld. Only offered when a file search comes back empty.
+     */
+    data object RequestStorageAccess : AuraAction
     data class SearchPlayStore(val query: String) : AuraAction
     data object NoOp : AuraAction
 }

@@ -24,7 +24,7 @@ import com.aura.home.*
 import com.aura.platform.AndroidAppIndexProvider
 import com.aura.platform.android.AndroidContactIndexProvider
 import com.aura.platform.android.AuraPrefs
-import com.aura.platform.android.AndroidFileSearchSource
+import com.aura.platform.android.FileSearchRepository
 import com.aura.platform.android.BatteryMonitor
 import com.aura.platform.android.MusicMonitor
 import com.aura.platform.android.NextEventProvider
@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
             val executor = remember(context) { AndroidActionExecutor(context.applicationContext) }
-            val fileSearchSource = remember(context) { AndroidFileSearchSource(context.applicationContext) }
+            val fileSearchSource = remember(context) { FileSearchRepository(context.applicationContext) }
             val contactProvider = remember(context) { AndroidContactIndexProvider(context.applicationContext) }
             val auraPrefs = remember(context) { AuraPrefs(context.applicationContext) }
             val homeSettings by auraPrefs.settings.collectAsState()

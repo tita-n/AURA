@@ -12,14 +12,19 @@
          Without this, SET_TIMER throws SecurityException: Permission Denial. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
-    <!-- Local file search (Phase 4C): scoped-storage MediaStore access ONLY.
-         Deliberately NOT MANAGE_EXTERNAL_STORAGE. READ_EXTERNAL_STORAGE covers
-         non-media documents on API 33+; the granular READ_MEDIA_* cover media.
-         If the permission is unavailable, AURA reports it honestly and shows no fake results. -->
+    <!-- Local file search — scoped MediaStore access (media + documents the OS allows). -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Broad local file discovery (Phase 5): all-files access. This is a PERSONAL launcher,
+         not distributed via Google Play, so MANAGE_EXTERNAL_STORAGE is appropriate and used
+         for genuine local search. It is NEVER requested at install/startup. AURA only offers it
+         (via a calm in-Command-Bar action) when a scoped search comes back empty, and fails
+         gracefully if the user declines. No file:// Uri is ever exposed; results open via
+         FileProvider content:// Uris. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <!-- Package visibility for launcher discovery (API 30+) -->
     <queries>
@@ -80,6 +85,18 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- FileProvider: opens filesystem files discovered by local search via content:// Uris
+             (never raw file://). Grants read permission to the viewer the user picks. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/aura_file_paths" />
+        </provider>
     </application>
 
 </manifest>

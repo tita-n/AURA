@@ -3,6 +3,8 @@ package com.aura.platform.android
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.annotation.TargetApi
 import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.MediaStore
@@ -41,6 +43,7 @@ class AndroidActionExecutor(
             is AuraAction.OpenCamera -> executeOpenCamera(a)
             is AuraAction.SetReminder -> executeSetReminder(a)
             is AuraAction.OpenFile -> executeOpenFile(a)
+            is AuraAction.RequestStorageAccess -> executeRequestStorageAccess()
             is AuraAction.Dial -> executeDial(a)
             is AuraAction.SendMessage -> executeSendMessage(a)
             is AuraAction.SendEmail -> executeSendEmail(a)
@@ -171,6 +174,24 @@ class AndroidActionExecutor(
             ExecutionResult.Unavailable
         } catch (e: Exception) {
             ExecutionResult.Failure(e.message ?: "Cannot open file")
+        }
+    }
+
+    @TargetApi(30)
+    private fun executeRequestStorageAccess(): ExecutionResult {
+        // Only offered when a file search returns empty and broad access is not yet granted.
+        if (Build.VERSION.SDK_INT < 30) return ExecutionResult.Unavailable
+        return try {
+            val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                data = android.net.Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            ExecutionResult.Success
+        } catch (e: ActivityNotFoundException) {
+            ExecutionResult.Unavailable
+        } catch (e: Exception) {
+            ExecutionResult.Failure(e.message ?: "Cannot open storage settings")
         }
     }
 
