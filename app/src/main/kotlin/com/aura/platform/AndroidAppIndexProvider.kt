@@ -36,11 +36,15 @@ class AndroidAppIndexProvider(
             addCategory(android.content.Intent.CATEGORY_LAUNCHER)
         }
         val apps = pm.queryIntentActivities(intent, 0)
+        // A package may expose aliases or multiple launcher activities. AURA launches
+        // the package entry point, so index one deterministic row per package.
         return apps.mapNotNull { info ->
             val label = info.loadLabel(pm)?.toString() ?: return@mapNotNull null
             val packageName = info.activityInfo.packageName ?: return@mapNotNull null
             if (label.isBlank() || packageName.isBlank()) return@mapNotNull null
             L0IndexFactory.appEntity(packageName, label)
-        }
+        }.groupBy { it.id }
+            .map { (_, entities) -> entities.sortedWith(compareBy({ it.normalizedLabel }, { it.displayLabel })).first() }
+            .sortedWith(compareBy({ it.normalizedLabel }, { it.displayLabel }, { it.id }))
     }
 }

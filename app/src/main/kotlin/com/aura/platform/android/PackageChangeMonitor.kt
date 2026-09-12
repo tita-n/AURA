@@ -28,6 +28,7 @@ class PackageChangeMonitor(
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
             addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
             addDataScheme("package")
         }
         if (Build.VERSION.SDK_INT >= 33) {

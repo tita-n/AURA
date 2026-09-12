@@ -12,9 +12,18 @@ import android.provider.Settings
 object LauncherRoleHelper {
 
     fun isDefaultHome(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < 29) return false
-        val rm = context.getSystemService(android.app.role.RoleManager::class.java) ?: return false
-        return rm.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
+        if (Build.VERSION.SDK_INT >= 29) {
+            val rm = context.getSystemService(android.app.role.RoleManager::class.java)
+            if (rm != null) return rm.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
+        }
+        // Android 8/9 have no RoleManager. Resolve the system HOME intent instead of
+        // always reporting false, which left the role banner permanently visible.
+        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addCategory(Intent.CATEGORY_DEFAULT)
+        }
+        val resolved = context.packageManager.resolveActivity(homeIntent, 0)
+        return resolved?.activityInfo?.packageName == context.packageName
     }
 
     fun isRoleAvailable(context: Context): Boolean {

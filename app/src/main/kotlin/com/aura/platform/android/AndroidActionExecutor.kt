@@ -9,7 +9,6 @@ import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.MediaStore
 import android.provider.Settings
-import android.util.Log
 import com.aura.domain.AuraAction
 import com.aura.resolver.l3.ValidatedAction
 
@@ -93,7 +92,6 @@ class AndroidActionExecutor(
         val secs = action.durationSeconds
         // Defensive: L3 already validated 1..86400, but guard against stale callers.
         if (secs <= 0 || secs > 24 * 3600) {
-            Log.d("AURA_TIMER", "SetTimer rejected: durationSeconds=$secs out of range")
             return ExecutionResult.Failure("Invalid timer duration")
         }
         // Build the correct timer intent — EXTRA_LENGTH is seconds, not millis.
@@ -104,21 +102,14 @@ class AndroidActionExecutor(
             putExtra(AlarmClock.EXTRA_SKIP_UI, false)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        Log.d("AURA_TIMER", "SetTimer duration=$secs intent=${intent.action} length=${intent.getIntExtra(AlarmClock.EXTRA_LENGTH, -1)} skipUi=${intent.getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, false)}")
-        // Package visibility: resolveActivity() returns null on API 30+ if <queries> missing,
-        // even when a handler exists. We therefore do NOT treat null as definitive Unavailable —
-        // we still try startActivity and let ActivityNotFoundException decide.
-        val handler = try { intent.resolveActivity(context.packageManager) } catch (_: Exception) { null }
-        Log.d("AURA_TIMER", "SetTimer handler=$handler")
+        // Package visibility can make resolveActivity() return null on API 30+ even when a
+        // handler exists, so start the intent and let ActivityNotFoundException decide.
         return try {
             context.startActivity(intent)
-            Log.d("AURA_TIMER", "SetTimer launch attempted — handler=$handler result=Success")
             ExecutionResult.Success
         } catch (e: ActivityNotFoundException) {
-            Log.d("AURA_TIMER", "SetTimer ActivityNotFound: ${e.message}")
             ExecutionResult.Unavailable
         } catch (e: Exception) {
-            Log.d("AURA_TIMER", "SetTimer failed: ${e.javaClass.simpleName} ${e.message}")
             ExecutionResult.Failure(e.message ?: "Failed to set timer")
         }
     }
@@ -234,8 +225,6 @@ class AndroidActionExecutor(
             putExtra(AlarmClock.EXTRA_SKIP_UI, false)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        val handler = try { intent.resolveActivity(context.packageManager) } catch (_: Exception) { null }
-        Log.d("AURA_TIMER", "SetAlarm hour=${action.hour} minute=${action.minute} handler=$handler")
         return try {
             context.startActivity(intent)
             ExecutionResult.Success
