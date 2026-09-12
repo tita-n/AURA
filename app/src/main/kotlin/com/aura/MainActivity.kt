@@ -447,6 +447,15 @@ class MainActivity : ComponentActivity() {
 
             var isDefault by remember { mutableStateOf(com.aura.platform.android.LauncherRoleHelper.isDefaultHome(context)) }
             var roleBannerDismissed by remember { mutableStateOf(false) }
+            DisposableEffect(this@MainActivity.lifecycle) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        isDefault = com.aura.platform.android.LauncherRoleHelper.isDefaultHome(context)
+                    }
+                }
+                this@MainActivity.lifecycle.addObserver(observer)
+                onDispose { this@MainActivity.lifecycle.removeObserver(observer) }
+            }
             val roleLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.StartActivityForResult()
             ) { isDefault = com.aura.platform.android.LauncherRoleHelper.isDefaultHome(context) }
@@ -519,6 +528,8 @@ class MainActivity : ComponentActivity() {
                             onFocusedChange = { focused = it },
                             onActExecute = { result -> executeValidated(result) },
                             onCandidateSelect = { candidate ->
+                                val selectedEntity = currentIndexState.value.allEntities()
+                                    .firstOrNull { it.id == candidate.id }
                                 val isApp = candidate.id.startsWith("app:")
                                 val isSettings = candidate.id.startsWith("settings:")
                                 val isFile = candidate.id.startsWith("file:")
@@ -545,6 +556,15 @@ class MainActivity : ComponentActivity() {
                                             displayName = candidate.title,
                                             mimeType = null
                                         )
+                                    )
+                                    selectedEntity != null -> ResolvedResult(
+                                        id = selectedEntity.id,
+                                        title = selectedEntity.displayLabel,
+                                        subtitle = selectedEntity.subtitle ?: selectedEntity.disambiguation,
+                                        type = selectedEntity.resultType,
+                                        action = selectedEntity.action,
+                                        actionChips = selectedEntity.actionChips,
+                                        undoable = false
                                     )
                                     else -> ResolvedResult(
                                         id = candidate.id, title = candidate.title, subtitle = candidate.disambiguation,

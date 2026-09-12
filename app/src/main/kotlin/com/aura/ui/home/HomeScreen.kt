@@ -276,6 +276,7 @@ fun HomeScreen(
                             ContextualSurface(
                                 items = contextualItems,
                                 reducedMotion = reducedMotion,
+                                homeInForeground = homeInForeground,
                                 onMusicPlayPause = onMusicPlayPause,
                                 onMusicNext = onMusicNext,
                                 onMusicPrev = onMusicPrev,
@@ -606,6 +607,7 @@ private fun WidgetSlotCard(
 private fun ContextualSurface(
     items: List<ContextualItem>,
     reducedMotion: Boolean,
+    homeInForeground: Boolean,
     onMusicPlayPause: () -> Unit,
     onMusicNext: () -> Unit,
     onMusicPrev: () -> Unit,
@@ -619,8 +621,8 @@ private fun ContextualSurface(
     // Subtle auto-rotation ONLY while visible, multiple items, and motion allowed.
     // The coroutine is cancelled when Home leaves foreground or the surface disappears,
     // and the guard prevents it from running at all when only one item remains.
-    if (items.size > 1 && !reducedMotion) {
-        LaunchedEffect(items.size) {
+    if (items.size > 1 && !reducedMotion && homeInForeground) {
+        LaunchedEffect(items.size, homeInForeground) {
             while (true) {
                 delay(6000)
                 index = (index + 1) % items.size
@@ -663,18 +665,28 @@ private fun ContextualSurface(
                     val selected = dot == index
                     Box(
                         Modifier
-                            .size(if (selected) 8.dp else 6.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
-                            .background(
-                                if (selected) AuraTheme.colors.textPrimary
-                                else AuraTheme.colors.textSecondary.copy(alpha = 0.4f)
-                            )
                             .clickable(
                                 role = Role.Button,
-                                onClickLabel = "Contextual item ${dot + 1}",
+                                onClickLabel = "Contextual item ${dot + 1}${if (selected) ", selected" else ""}",
                                 onClick = { index = dot }
                             )
-                    )
+                            .semantics {
+                                contentDescription = "Contextual item ${dot + 1}${if (selected) ", selected" else ""}"
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            Modifier
+                                .size(if (selected) 8.dp else 6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (selected) AuraTheme.colors.textPrimary
+                                    else AuraTheme.colors.textSecondary.copy(alpha = 0.4f)
+                                )
+                        )
+                    }
                     Spacer(Modifier.width(6.dp))
                 }
             }
@@ -711,7 +723,7 @@ private fun DockBar(
     val typography = AuraTheme.typography
     if (dock.isEmpty()) {
         Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.Center) {
-            Text("Dock empty — edit to add apps", style = typography.caption, color = colors.textSecondary.copy(alpha = 0.5f))
+            Text("Edit Home to add apps", style = typography.caption, color = colors.textSecondary.copy(alpha = 0.5f))
         }
         return
     }
